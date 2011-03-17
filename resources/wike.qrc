@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/" >
+        <file>text.png</file>
+        <file>html.png</file>
+        <file>wike.png</file>
+        <file>search.png</file>
+        <file>help.htm</file>
+        </qresource>
+</RCC>
