@@ -20,6 +20,8 @@ SOURCES += main.cpp\
     highlighter.cpp \
     qxt/qxtglobal.cpp \
     qxt/qxtglobalshortcut.cpp \
+    qtsingleapplication/qtsingleapplication.cpp \
+    qtsingleapplication/qtlocalpeer.cpp \
     hotkeysettings.cpp \
     noteitem.cpp
 
@@ -27,6 +29,8 @@ HEADERS  += mainwindow.h \
     notelist.h \
     highlighter.h \
     qxt/qxtglobalshortcut.h \
+    qtsingleapplication/qtsingleapplication.h \
+    qtsingleapplication/qtlocalpeer.h \
     hotkeysettings.h \
     noteitem.h
 

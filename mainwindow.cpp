@@ -4,6 +4,14 @@
 
 QString MainWindow::s_query;
 QFont MainWindow::s_font(tr("Tahoma"), 10);
+const char* query_like[] = {
+    "(content like '%KEYWORD%' or title like '%KEYWORD%' or tag like '%KEYWORD%')",
+    "(content like '%KEYWORD%' or title like '%KEYWORD%')",
+    "(content like '%KEYWORD%')",
+    "(title like '%KEYWORD%')",
+    "(tag like '%KEYWORD%')",
+};
+const char* tag_like = "tag like 'KEYWORD' or tag like 'KEYWORD,%' or tag like '%,KEYWORD,%' or tag like '%,KEYWORD'";
 
 //QFile g_log;
 MainWindow::MainWindow(QWidget *parent) :
@@ -11,7 +19,6 @@ MainWindow::MainWindow(QWidget *parent) :
     ui(new Ui::MainWindow)
 {
     QNetworkProxyFactory::setUseSystemConfiguration(true);
-    m_tag = tr("Untagged");
     initDB();
     ui->setupUi(this);
     createTrayIcon();
@@ -30,6 +37,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
     ui->searchBox->setStyleSheet("#searchBox {padding: 0 18px;background:url(:/search.png) no-repeat}");
     connect(ui->searchBox, SIGNAL(textChanged(const QString&)), this, SLOT(instantSearch(const QString&)));
+    connect(ui->comboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(loadNotes()));
     connect(ui->vsplitter, SIGNAL(splitterMoved(int,int)), this, SLOT(splitterMoved()));
 
     connect(ui->actionE_Xit, SIGNAL(triggered()), qApp, SLOT(quit()));
@@ -37,6 +45,7 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->action_Edit_Selected_Note, SIGNAL(triggered()), this, SLOT(editActiveNote()));
     connect(ui->action_Save_Note, SIGNAL(triggered()), this, SLOT(saveNote()));
     connect(ui->action_Delete_Selected_Note, SIGNAL(triggered()), this, SLOT(delActiveNote()));
+    connect(ui->action_HTML_Preview, SIGNAL(triggered()), this, SLOT(toggleNoteView()));
     connect(ui->action_Import, SIGNAL(triggered()), this, SLOT(importNotes()));
     connect(ui->action_Export_Notes, SIGNAL(triggered()), this, SLOT(exportNotes()));
     connect(ui->actionText_Note_Font, SIGNAL(triggered()), this, SLOT(setNoteFont()));
@@ -53,12 +62,9 @@ MainWindow::MainWindow(QWidget *parent) :
     m_tagModel = new QStringListModel();
     refreshTag();
     ui->tagView->setModel(m_tagModel);
-    connect(ui->tagView->selectionModel(), SIGNAL(currentChanged(QModelIndex,QModelIndex)), this, SLOT(tagChanged(QModelIndex,QModelIndex)));
+    ui->tagView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    connect(ui->tagView, SIGNAL(pressed(const QModelIndex&)), this, SLOT(tagPressed(const QModelIndex&)));
     ui->tagView->setStyleSheet("#tagView {font-size: 12px;} QListView::item:hover{background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #FAFBFE, stop: 1 #DCDEF1);color:rgb(0,0,128);}");
-}
-void MainWindow::init()
-{
-    ui->tagView->setCurrentIndex(ui->tagView->model()->index(0,0));
 }
 void MainWindow::createTrayIcon()
 {
@@ -139,13 +145,22 @@ void MainWindow::flushSettings()
 void MainWindow::toggleVisibility()
 {
     if(isVisible()) {
-        hide();
-        setWindowState((windowState() & ~Qt::WindowActive) | Qt::WindowMinimized);
+        showMinimized();
     }
     else {
         show();
         setWindowState((windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
     }
+}
+void MainWindow::handleSingleMessage(const QString&msg)
+{
+    //QMessageBox::information(this, tr("WikeNotes"), tr("Activated already running WikeNotes instance."));
+    if(isMinimized()) {
+        show();
+        setWindowState((windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
+    }
+    else
+        activateWindow();
 }
 void MainWindow::iconActivated(QSystemTrayIcon::ActivationReason reason)
 {
@@ -213,13 +228,16 @@ void MainWindow::loadNotes()
     ui->action_Save_Note->setEnabled(false);
 
     m_criterion = "";
-    if(m_tag != "") {
-        m_criterion = QString(" where tag='%1'").arg(m_tag);
-        if(s_query != "")
-            m_criterion += QString(" and content like '%%1%'").arg(s_query);
+    if(s_query != "") {
+        m_criterion  = query_like[ui->comboBox->currentIndex()];
+        m_criterion  = " where " + m_criterion.replace(QRegExp("KEYWORD"),s_query);
     }
-    else if(s_query != "") {
-        m_criterion = QString(" where content like '%%1%'").arg(s_query);
+    if(!m_tagList.empty()) {
+        if(m_criterion == "") 
+            m_criterion = QString(" where (%1)").arg(tag_like);
+        else
+            m_criterion += QString(" and (%1)").arg(tag_like);
+        m_criterion = m_criterion.replace(QRegExp("KEYWORD"),m_tagList.join(","));
     }
     QString sql = QString("select count(*) from notes %1").arg(m_criterion);
     if(m_q->exec(sql)) {
@@ -237,17 +255,22 @@ void MainWindow::instantSearch(const QString& query)
     s_query = query;
     loadNotes();
 }
-void MainWindow::tagChanged(const QModelIndex &current,const QModelIndex &previous)
+void MainWindow::tagPressed(const QModelIndex &current)
 {
-    if(current != previous) {
-        QString tag = current.data().toString();
-        if(tag == tr("All"))
-            tag = "";
-        if(m_tag != tag) {
-            m_tag = tag;
-            loadNotes();
-        }
+    QModelIndexList modelList = ui->tagView->selectionModel()->selectedIndexes();
+    m_tagList.clear();
+    for(int i =0 ; i < modelList.size() ; i++) {
+        m_tagList << modelList[i].data().toString();
     }
+    if(m_tagList.indexOf(tr("All")) != -1) {
+        m_tagList.clear();
+        ui->tagView->selectionModel()->clearSelection();
+        ui->tagView->setCurrentIndex(current);
+        if(current.row() != 0)
+            m_tagList << current.data().toString();
+    }
+    m_tagList.sort();
+    loadNotes();
 }
 void MainWindow::splitterMoved()
 {
@@ -289,14 +312,18 @@ bool MainWindow::insertNoteRes(QString& res_name, int noteId, int res_type, cons
     m_q->bindValue(":res_data", res_data);
     return m_q->exec();
 }
-bool MainWindow::saveNote(int row, QString& title, QString& content, QString& tag, QString& datetime)
+bool MainWindow::saveNote(int row, QString& title, QString& content, QStringList& tags, QString& datetime)
 {
     bool ret = false;
-    if(title != "" && tag != "") {
-        QString sql;
-        int newTagCount = getTagCount(tag);
+    if(title != "" && !tags.empty()) {
+        int i, tagSize = tags.size();
+        int *newTagCount = new int[tagSize];
+        for(i=0; i<tagSize; ++i) {
+            newTagCount[i] = getTagCount(tags[i]);
+        }
         if(row > 0) {
-            QString oldTag = getTag(row);
+            QString sql;
+            QStringList oldTags = getTagsOf(row);
             QStringList ups;
             title.replace("'","''");
             content.replace("'","''");
@@ -305,24 +332,33 @@ bool MainWindow::saveNote(int row, QString& title, QString& content, QString& ta
                 ups << "title='"+title+"'";
             if(content != "")
                 ups << "content='"+content+"'";
-            if(tag != "")
-                ups << "tag='"+tag+"'";
+            ups << "tag='"+tags.join(",")+"'";
             sql += ups.join(",");
             sql += QString(" WHERE rowid=%1").arg(row);
             ret = m_q->exec(sql);
-            if(ret && oldTag != tag) {
-                if(oldTag != "" && getTagCount(oldTag) == 0) 
-                    emit tagRemoved(oldTag);
-                if(newTagCount == 0)
-                    emit tagAdded(tag);
+            if(ret) {
+                int oldTagSize = oldTags.size();
+                for(i=0; i<oldTagSize; ++i) {
+                    if(getTagCount(oldTags[i]) == 0)
+                        emit tagRemoved(oldTags[i]);
+                }
+                for(i=0; i<tagSize; ++i) {
+                    if(newTagCount[i] == 0)
+                        emit tagAdded(tags[i]);
+                }
             }
         }
         else {
+            QString tag = tags.join(",");
             ret = insertNote(title, content, tag, datetime);
-            if(ret && (newTagCount == 0)) {
-                emit tagAdded(tag);
+            if(ret) {
+                for(i=0; i<tagSize; ++i) {
+                    if(newTagCount[i] == 0)
+                        emit tagAdded(tags[i]);
+                }
             }
         }
+        delete newTagCount;
     }
     return ret;
 }
@@ -342,20 +378,21 @@ bool MainWindow::event(QEvent* evt){
     }
     return QMainWindow::event(evt);
 }
-QString MainWindow::getTag(int row)
+QStringList MainWindow::getTagsOf(int row)
 {
-    QString tag;
+    QStringList tags;
     QString sql = QString("select tag from notes where rowid=%1").arg(row);
     if(m_q->exec(sql)) {
         m_q->first();
-        tag = m_q->value(0).toString();
+        tags = m_q->value(0).toString().split(",");
     }
-    return tag;
+    return tags;
 }
 int MainWindow::getTagCount(const QString& tag)
 {
     int ret = 0;
-    QString sql = "select count(*) from notes where tag='"+tag+"'";
+    QString sql = QString("select count(*) from notes where (%1)").arg(tag_like);
+    sql = sql.replace(QRegExp("KEYWORD"),tag);
     if(m_q->exec(sql)) {
         m_q->first();
         ret = m_q->value(0).toInt();
@@ -385,20 +422,30 @@ void MainWindow::removeTag(const QString& tag)
             ui->tagView->setCurrentIndex(m_tagModel->index(i-1));
     }
 }
+void MainWindow::toggleNoteView()
+{
+    NoteItem* activeItem = NoteItem::getActiveItem();
+    activeItem->toggleView();
+}
 bool MainWindow::delActiveNote()
 {
     NoteItem* activeItem = NoteItem::getActiveItem();
     int row = activeItem->getNoteId();
     bool ret = false;
-    QString oldTag;
     if(row > 0) {
-        oldTag = getTag(row);
+        QStringList oldTags = getTagsOf(row);
         QString sql = QString("delete from notes where rowid=%1").arg(row);
         if(m_q->exec(sql)) {
             sql = QString("delete from notes_attr where rowid=%1").arg(row);
             ret = m_q->exec(sql);
             sql = QString("delete from notes_res where noteid=%1").arg(row);
             ret = m_q->exec(sql);
+
+            int i, oldTagSize = oldTags.size();
+            for(i=0; i<oldTagSize; ++i) {
+                if(getTagCount(oldTags[i]) == 0)
+                    emit tagRemoved(oldTags[i]);
+            }
         }
     }
     else
@@ -407,8 +454,6 @@ bool MainWindow::delActiveNote()
         NoteItem* item = ui->noteList->getNextNote(activeItem);
         NoteItem::setActiveItem(item);
         ui->noteList->removeNote(activeItem);
-        if(oldTag != "" && getTagCount(oldTag) == 0)
-            emit tagRemoved(oldTag);
     }
     return ret;
 }
@@ -441,8 +486,10 @@ void MainWindow::refreshTag()
     tagList << tr("All");
     m_q->exec("select distinct tag from notes");
     while(m_q->next()) {
-        tagList << m_q->value(0).toString();
+        tagList << m_q->value(0).toString().split(",");
     }
+    tagList.sort();
+    tagList.removeDuplicates();
     m_tagModel->setStringList(tagList);
 }
 ImportDialog::ImportDialog(QWidget *parent) : QDialog(parent, Qt::Tool)
@@ -642,10 +689,16 @@ void MainWindow::about()
 {
     QMessageBox::about(this, tr("WikeNotes"), tr("Version: "APP_VERSION"\nAuthor: hzgmaxwell@hotmail.com"));
 }
-void MainWindow::noteSelected(bool has)
+void MainWindow::cancelEdit()
+{
+    ui->action_Save_Note->setEnabled(false);
+}
+void MainWindow::noteSelected(bool has, bool htmlView)
 {
     ui->action_Delete_Selected_Note->setEnabled(has);
     ui->action_Edit_Selected_Note->setEnabled(has);
+    ui->action_HTML_Preview->setEnabled(has);
+    ui->action_HTML_Preview->setChecked(htmlView);
 }
 void MainWindow::ensureVisible(NoteItem* item)
 {

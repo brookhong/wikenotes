@@ -56,17 +56,19 @@ class MainWindow : public QMainWindow
     public:
         explicit MainWindow(QWidget *parent = 0);
         ~MainWindow();
-        void init();
-        void loadNotes();
-        bool saveNote(int row, QString& title, QString& content, QString& tag, QString& datetime);
+        bool saveNote(int row, QString& title, QString& content, QStringList& tags, QString& datetime);
         bool insertNote(QString& title, QString& content, QString& tag, QString& datetime);
         bool insertNoteRes(QString& res_name, int noteId, int res_type, const QByteArray& res_data);
         QSqlQuery* getFoundNote(int idx);
         QSqlQuery* getSqlQuery();
-        void noteSelected(bool has);
+        void cancelEdit();
+        void noteSelected(bool has, bool htmlView);
         void ensureVisible(NoteItem* item);
         static QString s_query;
         static QFont s_font;
+
+    public slots:
+        void loadNotes();
 
     signals:
         void tagAdded(const QString&);
@@ -77,18 +79,20 @@ class MainWindow : public QMainWindow
         bool event(QEvent *event);
 
     private slots:
+        void handleSingleMessage(const QString&msg);
         void iconActivated(QSystemTrayIcon::ActivationReason reason);
         void toggleVisibility();
         void newNote();
         void editActiveNote();
         void saveNote();
         bool delActiveNote();
+        void toggleNoteView();
         void importNotes();
         void exportNotes();
         void addTag(const QString& tag);
         void removeTag(const QString& tag);
         void instantSearch(const QString& query);
-        void tagChanged(const QModelIndex &current,const QModelIndex &previous);
+        void tagPressed(const QModelIndex &current);
         void splitterMoved();
         void statusMessage(const QString& msg);
         void setNoteFont();
@@ -109,11 +113,11 @@ class MainWindow : public QMainWindow
         QStringListModel *m_tagModel;
         QSqlQuery* m_q;
 
-        QString m_tag;
+        QStringList m_tagList;
         QString m_criterion;
         NotesImporter m_importer;
         void initDB();
-        QString getTag(int row);
+        QStringList getTagsOf(int row);
         int getTagCount(const QString& tag);
         void refreshTag();
 };

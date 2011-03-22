@@ -20,16 +20,56 @@
    <string>WikeNotes</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QVBoxLayout" name="verticalLayout">
-    <item>
+   <layout class="QGridLayout" name="gridLayout">
+    <item row="0" column="0">
      <widget class="QLineEdit" name="searchBox"/>
     </item>
-    <item>
+    <item row="0" column="1">
+     <widget class="QLabel" name="label">
+      <property name="text">
+       <string>Matched in</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="2">
+     <widget class="QComboBox" name="comboBox">
+      <item>
+       <property name="text">
+        <string>Everywhere</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>Title and Content</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>Content only</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>Title only</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>Tag only</string>
+       </property>
+      </item>
+     </widget>
+    </item>
+    <item row="2" column="0" colspan="3">
      <widget class="QSplitter" name="vsplitter">
       <property name="orientation">
        <enum>Qt::Horizontal</enum>
       </property>
-      <widget class="QListView" name="tagView"/>
+      <widget class="QListView" name="tagView">
+       <property name="editTriggers">
+        <set>QAbstractItemView::NoEditTriggers</set>
+       </property>
+      </widget>
       <widget class="QScrollArea" name="scrollArea">
        <widget class="NoteList" name="noteList">
         <property name="geometry">
@@ -89,12 +129,47 @@
    <addaction name="menu_Help"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
+  <widget class="QToolBar" name="toolBar">
+   <property name="windowTitle">
+    <string>toolBar</string>
+   </property>
+   <property name="movable">
+    <bool>false</bool>
+   </property>
+   <property name="iconSize">
+    <size>
+     <width>24</width>
+     <height>24</height>
+    </size>
+   </property>
+   <property name="floatable">
+    <bool>false</bool>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="action_New_Note"/>
+   <addaction name="action_Edit_Selected_Note"/>
+   <addaction name="action_Save_Note"/>
+   <addaction name="action_Delete_Selected_Note"/>
+   <addaction name="action_HTML_Preview"/>
+   <addaction name="actionUsage"/>
+   <addaction name="action_About"/>
+  </widget>
   <action name="actionE_Xit">
    <property name="text">
     <string>E&amp;xit</string>
    </property>
   </action>
   <action name="action_New_Note">
+   <property name="icon">
+    <iconset>
+     <normalon>:/new.png</normalon>
+    </iconset>
+   </property>
    <property name="text">
     <string>&amp;New Text Note</string>
    </property>
@@ -105,6 +180,11 @@
   <action name="action_Edit_Selected_Note">
    <property name="enabled">
     <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normalon>:/edit.png</normalon>
+    </iconset>
    </property>
    <property name="text">
     <string>&amp;Edit Selected Note</string>
@@ -127,6 +207,11 @@
    <property name="enabled">
     <bool>false</bool>
    </property>
+   <property name="icon">
+    <iconset>
+     <normalon>:/delete.png</normalon>
+    </iconset>
+   </property>
    <property name="text">
     <string>&amp;Delete Selected Note</string>
    </property>
@@ -137,6 +222,11 @@
   <action name="action_Save_Note">
    <property name="enabled">
     <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normalon>:/save.png</normalon>
+    </iconset>
    </property>
    <property name="text">
     <string>&amp;Save Note</string>
@@ -156,18 +246,42 @@
    </property>
   </action>
   <action name="action_About">
+   <property name="icon">
+    <iconset>
+     <normalon>:/about.png</normalon>
+    </iconset>
+   </property>
    <property name="text">
     <string>&amp;About</string>
    </property>
   </action>
   <action name="actionUsage">
+   <property name="icon">
+    <iconset>
+     <normalon>:/help.png</normalon>
+    </iconset>
+   </property>
    <property name="text">
     <string>Usage</string>
    </property>
   </action>
-  <action name="action_Defrag">
+  <action name="action_HTML_Preview">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normalon>:/html_view.png</normalon>
+    </iconset>
+   </property>
    <property name="text">
-    <string>&amp;Defrag</string>
+    <string>&amp;HTML Preview</string>
+   </property>
+   <property name="shortcut">
+    <string>Alt+S</string>
    </property>
   </action>
  </widget>

@@ -179,6 +179,10 @@ void ContentWidget::toggleView()
     setAcceptRichText((m_viewType == 1));
     setLineWrapColumnOrWidth(lineWrapColumnOrWidth());
 }
+bool ContentWidget::isHTMLView()
+{
+    return (m_viewType == 1);
+}
 
 NoteItem* NoteItem::s_activeNote = 0;
 NoteItem::NoteItem(QWidget *parent, int row, bool readOnly) :
@@ -280,6 +284,10 @@ void NoteItem::exportFile()
         pos += rx.matchedLength();
     }
 }
+void NoteItem::toggleView()
+{
+    m_contentWidget->toggleView();
+}
 bool NoteItem::shortCut(int k)
 {
     switch(k) {
@@ -289,9 +297,6 @@ bool NoteItem::shortCut(int k)
             return true;
         case Qt::Key_X:
             exportFile();
-            return true;
-        case Qt::Key_S:
-            m_contentWidget->toggleView();
             return true;
         default:
             return false;
@@ -319,6 +324,7 @@ bool NoteItem::eventFilter(QObject *obj, QEvent *ev)
                         populate();
                         m_contentWidget->setLineWrapColumnOrWidth(m_contentWidget->lineWrapColumnOrWidth());
                         setReadOnly(true);
+                        g_mainWindow->cancelEdit();
                     }
                     else
                         g_mainWindow->loadNotes();
@@ -335,7 +341,7 @@ void NoteItem::populate()
 {
     m_q->exec(QString("select rowid,title,content,tag,created from notes left join notes_attr on notes.rowid=notes_attr.rowid where rowid=%1").arg(m_noteId));
     m_q->first();
-    m_title->setText("<h2>"+Qt::escape(m_q->value(1).toString())+"</h2><p align='right'>"+m_q->value(4).toString()+"</p>");
+    m_title->setText("<h2>"+Qt::escape(m_q->value(1).toString())+"</h2><table width='100%'><tr><td align='left' width='40%'>"+m_q->value(3).toString()+"</td><td align='center' width='20%'>"+m_q->value(0).toString()+"</td><td align='right' width='40%'>"+m_q->value(4).toString()+"</td></tr></table>");
     m_titleEdit->setText(m_q->value(1).toString());
     QString content = m_q->value(2).toString();
     m_contentWidget->setContent(content);
@@ -358,7 +364,7 @@ void NoteItem::autoSize()
         int h = 600;
         if(m_totalLine<30) {
             QSize sz = m_contentWidget->document()->documentLayout()->documentSize().toSize();
-            h = sz.height()+m_titleWidget->height()+40;
+            h = sz.height()+m_titleWidget->height()+30;
             h = (h > 600)? 600 : h;
         }
         resize(width(), h);
@@ -382,10 +388,12 @@ void NoteItem::setActiveItem(NoteItem* item)
         s_activeNote->setStyleSheet(".NoteItem { background-color : white; padding: 6px; }");
     }
     s_activeNote = item;
+    bool htmlView = false;
     if(s_activeNote) {
         s_activeNote->active();
+        htmlView = s_activeNote->m_contentWidget->isHTMLView();
     }
-    g_mainWindow->noteSelected(s_activeNote!=0);
+    g_mainWindow->noteSelected(s_activeNote!=0, htmlView);
 }
 NoteItem* NoteItem::getActiveItem()
 {
@@ -402,7 +410,12 @@ bool NoteItem::saveNote()
     QString content = m_contentWidget->getContent();
     QString title = m_titleEdit->text();
     QString tag = m_tagEdit->text();
-    ret = g_mainWindow->saveNote(m_noteId, title, content, tag, date);
+    tag = tag.replace(QRegExp("^\\s+"),"");
+    tag = tag.replace(QRegExp("\\s+$"),"");
+    tag = tag.replace(QRegExp("\\s*,\\s*"),",");
+    QStringList tags = tag.split(",");
+    tags.sort();
+    ret = g_mainWindow->saveNote(m_noteId, title, content, tags, date);
     if(ret) {
         QStringList res_to_remove;
         QStringList res_to_add;

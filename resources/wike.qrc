@@ -1,5 +1,12 @@
 <RCC>
     <qresource prefix="/" >
+        <file>new.png</file>
+        <file>save.png</file>
+        <file>edit.png</file>
+        <file>delete.png</file>
+        <file>html_view.png</file>
+        <file>help.png</file>
+        <file>about.png</file>
         <file>text.png</file>
         <file>html.png</file>
         <file>wike.png</file>

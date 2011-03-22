@@ -14,6 +14,7 @@ class ContentWidget : public QTextBrowser
         void setContent(const QString& str);
         QString getContent();
         void toggleView();
+        bool isHTMLView();
 
     private slots:
         void Finished(int requestId, bool error);
@@ -45,6 +46,7 @@ class NoteItem : public QFrame
         bool isReadOnly();
         bool saveNote();
         bool close();
+        void toggleView();
 
     private:
         bool eventFilter(QObject *obj, QEvent *ev);
