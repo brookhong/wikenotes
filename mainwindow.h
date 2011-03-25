@@ -56,6 +56,7 @@ class MainWindow : public QMainWindow
     public:
         explicit MainWindow(QWidget *parent = 0);
         ~MainWindow();
+        bool openDB();
         bool saveNote(int row, QString& title, QString& content, QStringList& tags, QString& datetime);
         bool insertNote(QString& title, QString& content, QString& tag, QString& datetime);
         bool insertNoteRes(QString& res_name, int noteId, int res_type, const QByteArray& res_data);
@@ -68,6 +69,7 @@ class MainWindow : public QMainWindow
         static QFont s_font;
 
     public slots:
+        void newDB();
         void loadNotes();
 
     signals:
@@ -82,6 +84,7 @@ class MainWindow : public QMainWindow
         void handleSingleMessage(const QString&msg);
         void iconActivated(QSystemTrayIcon::ActivationReason reason);
         void toggleVisibility();
+        void selectDB();
         void newNote();
         void editActiveNote();
         void saveNote();
@@ -97,6 +100,7 @@ class MainWindow : public QMainWindow
         void statusMessage(const QString& msg);
         void setNoteFont();
         void setHotKey();
+        void changeLanguage();
         void usage();
         void about();
         void importDone(int action);
@@ -104,19 +108,22 @@ class MainWindow : public QMainWindow
         QSystemTrayIcon *m_trayIcon;
         void createTrayIcon();
         void loadSettings();
-        bool m_bSettings;
         void flushSettings();
+        QString m_dbName;
+        bool m_bSettings;
         QxtGlobalShortcut* m_hkToggleMain;
         ImportDialog *m_importDialog;
         Ui::MainWindow *ui;
+        QTranslator m_translator;
+        QString m_lang;
 
         QStringListModel *m_tagModel;
         QSqlQuery* m_q;
+        void closeDB();
 
         QStringList m_tagList;
         QString m_criterion;
         NotesImporter m_importer;
-        void initDB();
         QStringList getTagsOf(int row);
         int getTagCount(const QString& tag);
         void refreshTag();

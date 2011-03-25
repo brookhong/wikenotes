@@ -19,7 +19,6 @@ MainWindow::MainWindow(QWidget *parent) :
     ui(new Ui::MainWindow)
 {
     QNetworkProxyFactory::setUseSystemConfiguration(true);
-    initDB();
     ui->setupUi(this);
     createTrayIcon();
 
@@ -28,8 +27,16 @@ MainWindow::MainWindow(QWidget *parent) :
     m_hkToggleMain->setShortcut(QKeySequence("Alt+Q"));
     loadSettings();
     m_bSettings = false;
+    if(m_dbName.isEmpty())
+        m_dbName = QCoreApplication::applicationDirPath()+QDir::separator()+"default.wike";
+    if(m_lang.isEmpty())
+        m_lang = "English";
+    else if(m_translator.load(m_lang+".qm", ".")){
+        qApp->installTranslator(&m_translator);
+        ui->retranslateUi(this);
+    }
 
-    m_importDialog = new ImportDialog(this),
+    m_importDialog = new ImportDialog(this);
     ui->scrollArea->setStyleSheet("#scrollArea { background-color : white;}");
     ui->vsplitter->setHandleWidth(1);
     ui->vsplitter->setStretchFactor(0, 0);
@@ -41,6 +48,8 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->vsplitter, SIGNAL(splitterMoved(int,int)), this, SLOT(splitterMoved()));
 
     connect(ui->actionE_Xit, SIGNAL(triggered()), qApp, SLOT(quit()));
+    connect(ui->actionNew_Library, SIGNAL(triggered()), this, SLOT(newDB()));
+    connect(ui->action_Open_Notes_Library, SIGNAL(triggered()), this, SLOT(selectDB()));
     connect(ui->action_New_Note, SIGNAL(triggered()), this, SLOT(newNote()));
     connect(ui->action_Edit_Selected_Note, SIGNAL(triggered()), this, SLOT(editActiveNote()));
     connect(ui->action_Save_Note, SIGNAL(triggered()), this, SLOT(saveNote()));
@@ -50,6 +59,8 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->action_Export_Notes, SIGNAL(triggered()), this, SLOT(exportNotes()));
     connect(ui->actionText_Note_Font, SIGNAL(triggered()), this, SLOT(setNoteFont()));
     connect(ui->action_Hotkey_Settings, SIGNAL(triggered()), this, SLOT(setHotKey()));
+    connect(ui->action_English, SIGNAL(triggered()), this, SLOT(changeLanguage()));
+    connect(ui->action_Chinese, SIGNAL(triggered()), this, SLOT(changeLanguage()));
     connect(ui->actionUsage, SIGNAL(triggered()), this, SLOT(usage()));
     connect(ui->action_About, SIGNAL(triggered()), this, SLOT(about()));
 
@@ -60,7 +71,6 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(&m_importer, SIGNAL(importDone(int)), this, SLOT(importDone(int)));
 
     m_tagModel = new QStringListModel();
-    refreshTag();
     ui->tagView->setModel(m_tagModel);
     ui->tagView->setSelectionMode(QAbstractItemView::ExtendedSelection);
     connect(ui->tagView, SIGNAL(pressed(const QModelIndex&)), this, SLOT(tagPressed(const QModelIndex&)));
@@ -84,7 +94,7 @@ void MainWindow::createTrayIcon()
     m_trayIcon = new QSystemTrayIcon(this);
     m_trayIcon->setContextMenu(trayIconMenu);
     m_trayIcon->setIcon(icon);
-    m_trayIcon->setToolTip(tr("wike"));
+    m_trayIcon->setToolTip(tr("WikeNotes"));
     m_trayIcon->show();
     connect(m_trayIcon, SIGNAL(activated(QSystemTrayIcon::ActivationReason)), this, SLOT(iconActivated(QSystemTrayIcon::ActivationReason)));
 }
@@ -102,6 +112,14 @@ void MainWindow::loadSettings()
                 else if(xml.name() == "toggle_main_window") {
                     QXmlStreamAttributes attrs = xml.attributes();
                     m_hkToggleMain->setShortcut(QKeySequence(attrs.value("shortcut").toString()));
+                }
+                else if(xml.name() == "default_notes_library") {
+                    QXmlStreamAttributes attrs = xml.attributes();
+                    m_dbName = attrs.value("name").toString();
+                }
+                else if(xml.name() == "language") {
+                    QXmlStreamAttributes attrs = xml.attributes();
+                    m_lang = attrs.value("name").toString();
                 }
             }
             xml.readNext();
@@ -121,6 +139,14 @@ void MainWindow::flushSettings()
         writer.writeStartDocument();
 
         writer.writeStartElement("config");
+
+            writer.writeStartElement("default_notes_library");
+            writer.writeAttribute("name", m_dbName);
+            writer.writeEndElement();
+
+            writer.writeStartElement("language");
+            writer.writeAttribute("name", m_lang);
+            writer.writeEndElement();
 
             writer.writeStartElement("text_font");
             writer.writeAttribute("name", s_font.family());
@@ -154,7 +180,6 @@ void MainWindow::toggleVisibility()
 }
 void MainWindow::handleSingleMessage(const QString&msg)
 {
-    //QMessageBox::information(this, tr("WikeNotes"), tr("Activated already running WikeNotes instance."));
     if(isMinimized()) {
         show();
         setWindowState((windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
@@ -170,7 +195,7 @@ void MainWindow::iconActivated(QSystemTrayIcon::ActivationReason reason)
             toggleVisibility();
             break;
         case QSystemTrayIcon::MiddleClick:
-            m_trayIcon->showMessage(tr("wike"), tr("help"), QSystemTrayIcon::Information, 300);
+            m_trayIcon->showMessage(tr("WikeNotes"), tr("help"), QSystemTrayIcon::Information, 300);
             break;
         default:
             break;
@@ -182,27 +207,85 @@ MainWindow::~MainWindow()
         flushSettings();
     delete ui;
 }
-void MainWindow::initDB()
+void MainWindow::newDB()
 {
-    QString dbName = QCoreApplication::applicationDirPath()+QDir::separator()+"wike.db";
-    bool init = !QFile::exists(dbName);
-    QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", dbName);
-    db.setDatabaseName(dbName);
-    if(!db.open()) {
-        //to do
-        db = QSqlDatabase();
-        QSqlDatabase::removeDatabase(dbName);
+    QString dbName = QFileDialog::getSaveFileName(this, tr("Create New Library"), ".", tr("wike files (*.wike)"));
+
+    if (!dbName.isEmpty()) {
+        closeDB();
+        m_dbName = dbName;
+        openDB();
     }
+}
+bool MainWindow::openDB()
+{
+    bool ret = false;
+    bool init = !QFile::exists(m_dbName);
+    QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", m_dbName);
+    db.setDatabaseName(m_dbName);
+    db.open();
     m_q = new QSqlQuery(db);
-    //g_log.setFileName(QCoreApplication::applicationDirPath()+QDir::separator()+"wike.log");
-    //g_log.open(QIODevice::WriteOnly | QIODevice::Text);
+    QString defaultKey = "jessie&brook";
     if(init) {        
-        //m_q->exec("CREATE VIRTUAL TABLE notes USING fts3(title, content, tag)");
+        QString password = QInputDialog::getText(this, tr("WikeNotes"),
+                tr("Would you like to protect your notes library with a password?\nCancel to set no password.\n\nPassword: "), QLineEdit::Password);
+        if (password.isEmpty()) 
+            password = defaultKey;
+        m_q->exec("PRAGMA key = '"+QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha1).toHex()+"';");
         m_q->exec("CREATE TABLE notes(title TEXT, content TEXT, tag TEXT)");
         m_q->exec("CREATE TABLE notes_attr(rowid INTEGER PRIMARY KEY ASC, created DATETIME)");
         m_q->exec("CREATE TABLE notes_res(res_name VARCHAR(40), noteid INTEGER, res_type INTEGER, res_data BLOB, CONSTRAINT unique_res_within_a_note UNIQUE (res_name, noteid) )");
-        //g_log.write(QString(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")+" create notes_res %1\n").arg(int(a)).toLocal8Bit());
-        //g_log.flush();
+        ret = true;
+    }
+    else {
+        m_q->exec("PRAGMA key = '"+QCryptographicHash::hash(defaultKey.toUtf8(), QCryptographicHash::Sha1).toHex()+"';");
+        if(!m_q->exec("select rowid from notes limit 1")) {
+            do {
+                QString password = QInputDialog::getText(this, tr("WikeNotes"), tr("Password:"), QLineEdit::Password);
+                m_q->clear();
+                db.close();
+                db.open();
+                m_q->exec("PRAGMA key = '"+QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha1).toHex()+"';");
+                if(m_q->exec("select rowid from notes limit 1")) {
+                    ret = true;
+                    break;
+                }
+            }while(QMessageBox::warning(this, tr("WikeNotes"),tr("Invalid password! Try again?"),
+                        QMessageBox::Yes|QMessageBox::No) == QMessageBox::Yes);
+        }
+        else
+            ret = true;
+    }
+    if(ret) {
+        setWindowTitle(QString("WikeNotes (%1)").arg(m_dbName));
+        refreshTag();
+        loadNotes();
+    }
+    return ret;
+}
+void MainWindow::closeDB()
+{
+    delete m_q;
+    QSqlDatabase::removeDatabase(m_dbName);
+}
+void MainWindow::selectDB()
+{
+    QString dbName = QFileDialog::getOpenFileName(this, tr("Open Notes Library"), ".", tr("wike files (*.wike)"));
+    if (!dbName.isEmpty()) {
+        closeDB();
+        m_dbName = dbName;
+        while(1) {
+            if(openDB()) {
+                if(QMessageBox::question(this,
+                            tr("WikeNotes"),
+                            tr("Use %1 as default Notes Library.").arg(m_dbName),
+                            QMessageBox::Yes|QMessageBox::No) == QMessageBox::Yes) {
+                    m_bSettings = true;
+                }
+                break;
+            }
+            m_dbName = QFileDialog::getOpenFileName(this, tr("Open Notes Library"), ".", tr("wike files (*.wike)"));
+        }
     }
 }
 QSqlQuery* MainWindow::getSqlQuery()
@@ -243,7 +326,7 @@ void MainWindow::loadNotes()
     if(m_q->exec(sql)) {
         m_q->first();
         int found = m_q->value(0).toInt();
-        ui->statusbar->showMessage(QString("%1 notes found").arg(found));
+        ui->statusbar->showMessage(tr("%1 notes found").arg(found));
         ui->noteList->extend(found);
         ui->noteList->update();
         ui->noteList->adjustSize();
@@ -483,13 +566,13 @@ void MainWindow::importDone(int action)
 void MainWindow::refreshTag()
 {
     QStringList tagList;
-    tagList << tr("All");
     m_q->exec("select distinct tag from notes");
     while(m_q->next()) {
         tagList << m_q->value(0).toString().split(",");
     }
     tagList.sort();
     tagList.removeDuplicates();
+    tagList.prepend(tr("All"));
     m_tagModel->setStringList(tagList);
 }
 ImportDialog::ImportDialog(QWidget *parent) : QDialog(parent, Qt::Tool)
@@ -629,7 +712,7 @@ void NotesImporter::run()
 }
 void MainWindow::importNotes()
 {
-    QString fileName = QFileDialog::getOpenFileName(this, tr("import notes"), ".", tr("xml files (*.xml)"));
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Import Notes"), ".", tr("xml files (*.xml)"));
 
     if (!fileName.isEmpty()) {
         m_importer.importFile(fileName);
@@ -639,7 +722,7 @@ void MainWindow::importNotes()
 }
 void MainWindow::exportNotes()
 {
-    QString fileName = QFileDialog::getSaveFileName(this, tr("export notes"), ".", tr("xml files (*.xml)"));
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Export Notes"), ".", tr("xml files (*.xml)"));
 
     if (!fileName.isEmpty()) {
         m_importer.exportFile(fileName);
@@ -667,6 +750,25 @@ void MainWindow::setHotKey()
     }
     else
         m_hkToggleMain->setShortcut(ks);
+}
+void MainWindow::changeLanguage()
+{
+    QAction *act = qobject_cast<QAction*>(sender());
+    QString lang = act->toolTip();
+
+    if(lang == "English") {
+        qApp->removeTranslator(&m_translator);
+    }
+    else if(lang == "Chinese") {
+        m_translator.load("chinese.qm", ".");
+        qApp->installTranslator(&m_translator);
+    }
+    if(m_lang != lang) {
+        m_bSettings = true;
+        m_lang = lang;
+        ui->retranslateUi(this);
+        m_tagModel->setData(m_tagModel->index(0),tr("All"));
+    }
 }
 void MainWindow::usage()
 {

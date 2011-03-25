@@ -99,8 +99,10 @@
     <property name="title">
      <string>&amp;File</string>
     </property>
-    <addaction name="action_New_Note"/>
+    <addaction name="actionNew_Library"/>
+    <addaction name="action_Open_Notes_Library"/>
     <addaction name="separator"/>
+    <addaction name="action_New_Note"/>
     <addaction name="action_Edit_Selected_Note"/>
     <addaction name="action_Save_Note"/>
     <addaction name="action_Delete_Selected_Note"/>
@@ -114,8 +116,16 @@
     <property name="title">
      <string>&amp;Options</string>
     </property>
+    <widget class="QMenu" name="menu_Language">
+     <property name="title">
+      <string>&amp;Language</string>
+     </property>
+     <addaction name="action_English"/>
+     <addaction name="action_Chinese"/>
+    </widget>
     <addaction name="actionText_Note_Font"/>
     <addaction name="action_Hotkey_Settings"/>
+    <addaction name="menu_Language"/>
    </widget>
    <widget class="QMenu" name="menu_Help">
     <property name="title">
@@ -151,6 +161,7 @@
    <attribute name="toolBarBreak">
     <bool>false</bool>
    </attribute>
+   <addaction name="action_Open_Notes_Library"/>
    <addaction name="action_New_Note"/>
    <addaction name="action_Edit_Selected_Note"/>
    <addaction name="action_Save_Note"/>
@@ -171,7 +182,7 @@
     </iconset>
    </property>
    <property name="text">
-    <string>&amp;New Text Note</string>
+    <string>&amp;New Note</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+N</string>
@@ -282,6 +293,34 @@
    </property>
    <property name="shortcut">
     <string>Alt+S</string>
+   </property>
+  </action>
+  <action name="action_Open_Notes_Library">
+   <property name="icon">
+    <iconset>
+     <normalon>:/open.png</normalon>
+    </iconset>
+   </property>
+   <property name="text">
+    <string>&amp;Open Notes Library</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+O</string>
+   </property>
+  </action>
+  <action name="actionNew_Library">
+   <property name="text">
+    <string>New &amp;Library</string>
+   </property>
+  </action>
+  <action name="action_English">
+   <property name="text">
+    <string>&amp;English</string>
+   </property>
+  </action>
+  <action name="action_Chinese">
+   <property name="text">
+    <string>&amp;Chinese</string>
    </property>
   </action>
  </widget>

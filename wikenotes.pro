@@ -6,7 +6,7 @@
 
 QT       += core gui sql webkit network
 
-VERSION = 0.2
+VERSION = 0.3
 # Define the preprocessor macro to get the application version in our application.
 DEFINES += APP_VERSION=\\\"$$VERSION\\\"
 
@@ -37,10 +37,11 @@ HEADERS  += mainwindow.h \
 FORMS    += mainwindow.ui \
     hotkeysettings.ui
 
-RESOURCES += \
-    resources/wike.qrc
+RESOURCES += resources/wike.qrc
 
 win32 {
     SOURCES += qxt/qxtglobalshortcut_win.cpp
     RC_FILE = resources/wike.rc
 }
+
+TRANSLATIONS = chinese.ts
