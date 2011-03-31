@@ -47,6 +47,7 @@ class NoteItem : public QFrame
         bool saveNote();
         bool close();
         void toggleView();
+        void cancelEdit();
 
     private:
         bool eventFilter(QObject *obj, QEvent *ev);

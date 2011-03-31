@@ -47,6 +47,8 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->comboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(loadNotes()));
     connect(ui->vsplitter, SIGNAL(splitterMoved(int,int)), this, SLOT(splitterMoved()));
 
+    addAction(ui->actionFocusSearchBox);
+    connect(ui->actionFocusSearchBox, SIGNAL(triggered()), ui->searchBox, SLOT(setFocus()));
     connect(ui->actionE_Xit, SIGNAL(triggered()), qApp, SLOT(quit()));
     connect(ui->actionNew_Library, SIGNAL(triggered()), this, SLOT(newDB()));
     connect(ui->action_Open_Notes_Library, SIGNAL(triggered()), this, SLOT(selectDB()));
@@ -232,7 +234,7 @@ bool MainWindow::openDB()
         if (password.isEmpty()) 
             password = defaultKey;
         m_q->exec("PRAGMA key = '"+QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha1).toHex()+"';");
-        m_q->exec("CREATE TABLE notes(title TEXT, content TEXT, tag TEXT)");
+        m_q->exec("CREATE TABLE notes(title TEXT, content TEXT, tag TEXT, hash TEXT)");
         m_q->exec("CREATE TABLE notes_attr(rowid INTEGER PRIMARY KEY ASC, created DATETIME)");
         m_q->exec("CREATE TABLE notes_res(res_name VARCHAR(40), noteid INTEGER, res_type INTEGER, res_data BLOB, CONSTRAINT unique_res_within_a_note UNIQUE (res_name, noteid) )");
         ret = true;
@@ -369,19 +371,27 @@ void MainWindow::newNote()
     ui->action_Save_Note->setEnabled(true);
     resizeEvent(0);
 }
-bool MainWindow::insertNote(QString& title, QString& content, QString& tag, QString& datetime)
+int MainWindow::insertNote(QString& title, QString& content, QString& tag, QString& hashKey, QString& datetime)
 {
-    bool ret = false;
-    title.replace("'","''");
-    content.replace("'","''");
-    QString sql = "INSERT INTO notes(title, content, tag) VALUES('";
-    sql += title+"','";
-    sql += content+"','";
-    sql += tag+"')";
-    ret = m_q->exec(sql);
-    if(ret) {
-        sql = QString("INSERT INTO notes_attr(created) VALUES('%1')").arg(datetime);
-        m_q->exec(sql);
+    int ret = 2;
+    QString sql = "select rowid from notes where hash='"+hashKey+"'";
+    m_q->exec(sql);
+    if(m_q->first()) {
+        ret = 1;
+    }
+    else {
+        title.replace("'","''");
+        content.replace("'","''");
+        sql = "INSERT INTO notes(title, content, tag, hash) VALUES('";
+        sql += title+"','";
+        sql += content+"','";
+        sql += tag+"','";
+        sql += hashKey+"')";
+        if(m_q->exec(sql)) {
+            ret = 0;
+            sql = QString("INSERT INTO notes_attr(created) VALUES('%1')").arg(datetime);
+            m_q->exec(sql);
+        }
     }
     return ret;
 }
@@ -398,6 +408,7 @@ bool MainWindow::insertNoteRes(QString& res_name, int noteId, int res_type, cons
 bool MainWindow::saveNote(int row, QString& title, QString& content, QStringList& tags, QString& datetime)
 {
     bool ret = false;
+    QString hashKey = QCryptographicHash::hash(content.toUtf8(), QCryptographicHash::Sha1).toHex();
     if(title != "" && !tags.empty()) {
         int i, tagSize = tags.size();
         int *newTagCount = new int[tagSize];
@@ -405,36 +416,43 @@ bool MainWindow::saveNote(int row, QString& title, QString& content, QStringList
             newTagCount[i] = getTagCount(tags[i]);
         }
         if(row > 0) {
-            QString sql;
-            QStringList oldTags = getTagsOf(row);
-            QStringList ups;
-            title.replace("'","''");
-            content.replace("'","''");
-            sql = "UPDATE notes SET ";
-            if(title != "")
-                ups << "title='"+title+"'";
-            if(content != "")
-                ups << "content='"+content+"'";
-            ups << "tag='"+tags.join(",")+"'";
-            sql += ups.join(",");
-            sql += QString(" WHERE rowid=%1").arg(row);
-            ret = m_q->exec(sql);
-            if(ret) {
-                int oldTagSize = oldTags.size();
-                for(i=0; i<oldTagSize; ++i) {
-                    if(getTagCount(oldTags[i]) == 0)
-                        emit tagRemoved(oldTags[i]);
+            QString sql = "select rowid from notes where hash='"+hashKey+"'";
+            m_q->exec(sql);
+            if(m_q->first() && m_q->value(0).toInt() != row) {
+                statusMessage(tr("There exists a note with the same content, thus I will NOT same this one."));
+            }
+            else {
+                QStringList oldTags = getTagsOf(row);
+                QStringList ups;
+                title.replace("'","''");
+                content.replace("'","''");
+                sql = "UPDATE notes SET ";
+                if(title != "")
+                    ups << "title='"+title+"'";
+                if(content != "") {
+                    ups << "content='"+content+"'";
+                    ups << "hash='"+hashKey+"'";
                 }
-                for(i=0; i<tagSize; ++i) {
-                    if(newTagCount[i] == 0)
-                        emit tagAdded(tags[i]);
+                ups << "tag='"+tags.join(",")+"'";
+                sql += ups.join(",");
+                sql += QString(" WHERE rowid=%1").arg(row);
+                ret = m_q->exec(sql);
+                if(ret) {
+                    int oldTagSize = oldTags.size();
+                    for(i=0; i<oldTagSize; ++i) {
+                        if(getTagCount(oldTags[i]) == 0)
+                            emit tagRemoved(oldTags[i]);
+                    }
+                    for(i=0; i<tagSize; ++i) {
+                        if(newTagCount[i] == 0)
+                            emit tagAdded(tags[i]);
+                    }
                 }
             }
         }
         else {
             QString tag = tags.join(",");
-            ret = insertNote(title, content, tag, datetime);
-            if(ret) {
+            if(insertNote(title, content, tag, hashKey, datetime) == 0) {
                 for(i=0; i<tagSize; ++i) {
                     if(newTagCount[i] == 0)
                         emit tagAdded(tags[i]);
@@ -458,6 +476,20 @@ bool MainWindow::event(QEvent* evt){
         QTimer::singleShot(50, this, SLOT(hide()));
         evt->ignore();
         return true;
+    }
+    else if(QEvent::KeyPress == type) {
+        QKeyEvent *keyEvent = static_cast<QKeyEvent*>(evt);
+        int k = keyEvent->key();
+        if(k == Qt::Key_Escape) {
+            NoteItem* activeItem = NoteItem::getActiveItem();
+            if(activeItem && !activeItem->isReadOnly())
+                activeItem->cancelEdit();
+            else if(!ui->searchBox->text().isEmpty())
+                ui->searchBox->setText("");
+            else
+                showMinimized();
+            return true;
+        }
     }
     return QMainWindow::event(evt);
 }
@@ -613,7 +645,7 @@ void NotesImporter::run()
     if(m_action == 0) {
         if (file.open(QIODevice::ReadOnly)) {
             QXmlStreamReader xml(&file);
-            QString title,datetime,link,tag,content,res_name,res_type;
+            QString title,datetime,link,tag,content,hashKey,res_name,res_type;
             int res_flag = 0;
             QByteArray res_data;
             QSqlQuery *q = g_mainWindow->getSqlQuery();
@@ -645,10 +677,15 @@ void NotesImporter::run()
                 }
                 else if(xml.isEndElement()) {
                     if(xml.name() == "note") {
-                        if(g_mainWindow->insertNote(title,content,tag, datetime)) {
+                        hashKey = QCryptographicHash::hash(content.toUtf8(), QCryptographicHash::Sha1).toHex();
+                        int ret = g_mainWindow->insertNote(title,content,tag,hashKey,datetime);
+                        if(ret == 0) {
                             num++;
                             noteId++;
                             emit importMsg(tr("%1 notes imported from %2.").arg(num).arg(m_file));
+                        }
+                        else if(ret == 1) {
+                            emit importMsg(tr("Note already exists in the notes library:\n\n%1").arg(title));
                         }
                         else {
                             emit importMsg(tr("SQL Error."));

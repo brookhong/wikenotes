@@ -302,6 +302,17 @@ bool NoteItem::shortCut(int k)
             return false;
     }
 }
+void NoteItem::cancelEdit()
+{
+    if(m_noteId > 0) {
+        populate();
+        m_contentWidget->setLineWrapColumnOrWidth(m_contentWidget->lineWrapColumnOrWidth());
+        setReadOnly(true);
+        g_mainWindow->cancelEdit();
+    }
+    else
+        g_mainWindow->loadNotes();
+}
 bool NoteItem::eventFilter(QObject *obj, QEvent *ev)
 {
     QEvent::Type type = ev->type();
@@ -318,17 +329,6 @@ bool NoteItem::eventFilter(QObject *obj, QEvent *ev)
                 int k = keyEvent->key();
                 if(m_widgetState == 1 || keyEvent->modifiers() == Qt::AltModifier) {
                     return shortCut(k);
-                }
-                else if(k == Qt::Key_Escape) {
-                    if(m_noteId > 0) {
-                        populate();
-                        m_contentWidget->setLineWrapColumnOrWidth(m_contentWidget->lineWrapColumnOrWidth());
-                        setReadOnly(true);
-                        g_mainWindow->cancelEdit();
-                    }
-                    else
-                        g_mainWindow->loadNotes();
-                    return true;
                 }
             }
             break;

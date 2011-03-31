@@ -58,7 +58,10 @@ class MainWindow : public QMainWindow
         ~MainWindow();
         bool openDB();
         bool saveNote(int row, QString& title, QString& content, QStringList& tags, QString& datetime);
-        bool insertNote(QString& title, QString& content, QString& tag, QString& datetime);
+
+        //0: success; 1: already exists; 2: other error
+        int insertNote(QString& title, QString& content, QString& tag, QString& hashKey, QString& datetime);
+
         bool insertNoteRes(QString& res_name, int noteId, int res_type, const QByteArray& res_data);
         QSqlQuery* getFoundNote(int idx);
         QSqlQuery* getSqlQuery();

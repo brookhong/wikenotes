@@ -22,7 +22,11 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="gridLayout">
     <item row="0" column="0">
-     <widget class="QLineEdit" name="searchBox"/>
+     <widget class="QLineEdit" name="searchBox">
+      <property name="toolTip">
+       <string>Type whatever you want to find here</string>
+      </property>
+     </widget>
     </item>
     <item row="0" column="1">
      <widget class="QLabel" name="label">
@@ -321,6 +325,14 @@
   <action name="action_Chinese">
    <property name="text">
     <string>&amp;Chinese</string>
+   </property>
+  </action>
+  <action name="actionFocusSearchBox">
+   <property name="text">
+    <string>focusSearchBox</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+F</string>
    </property>
   </action>
  </widget>
