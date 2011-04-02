@@ -307,6 +307,13 @@ QSqlQuery* MainWindow::getFoundNote(int idx)
     m_q->exec(sql);
     return m_q;
 }
+void MainWindow::loadImageFromDB(const QString& fileName, QByteArray& imgData)
+{
+    m_q->exec(QString("select res_name,noteid,res_type,res_data from notes_res where res_name='%1'").arg(fileName));
+    if(m_q->next()) {
+        imgData = m_q->value(3).toByteArray();
+    }
+}
 void MainWindow::loadNotes()
 {
     ui->noteList->clear();
@@ -359,16 +366,6 @@ void MainWindow::tagPressed(const QModelIndex &current)
 }
 void MainWindow::splitterMoved()
 {
-    resizeEvent(0);
-}
-void MainWindow::newNote()
-{
-    ui->noteList->clear();
-    NoteItem *noteItem = new NoteItem(ui->noteList,0,false);
-    ui->noteList->addNote(noteItem);
-    noteItem->autoSize();
-    NoteItem::setActiveItem(noteItem);
-    ui->action_Save_Note->setEnabled(true);
     resizeEvent(0);
 }
 int MainWindow::insertNote(QString& title, QString& content, QString& tag, QString& hashKey, QString& datetime)
@@ -453,6 +450,7 @@ bool MainWindow::saveNote(int row, QString& title, QString& content, QStringList
         else {
             QString tag = tags.join(",");
             if(insertNote(title, content, tag, hashKey, datetime) == 0) {
+                ret = true;
                 for(i=0; i<tagSize; ++i) {
                     if(newTagCount[i] == 0)
                         emit tagAdded(tags[i]);
@@ -482,8 +480,10 @@ bool MainWindow::event(QEvent* evt){
         int k = keyEvent->key();
         if(k == Qt::Key_Escape) {
             NoteItem* activeItem = NoteItem::getActiveItem();
-            if(activeItem && !activeItem->isReadOnly())
-                activeItem->cancelEdit();
+            if(activeItem && !activeItem->isReadOnly()) {
+                cancelEdit();
+                loadNotes();
+            }
             else if(!ui->searchBox->text().isEmpty())
                 ui->searchBox->setText("");
             else
@@ -540,7 +540,8 @@ void MainWindow::removeTag(const QString& tag)
 void MainWindow::toggleNoteView()
 {
     NoteItem* activeItem = NoteItem::getActiveItem();
-    activeItem->toggleView();
+    if(activeItem->isReadOnly())
+        activeItem->toggleView();
 }
 bool MainWindow::delActiveNote()
 {
@@ -572,11 +573,28 @@ bool MainWindow::delActiveNote()
     }
     return ret;
 }
+void MainWindow::newNote()
+{
+    ui->noteList->clear();
+    NoteItem *noteItem = new NoteItem(ui->noteList,0,false);
+    ui->noteList->addNote(noteItem);
+    noteItem->autoSize();
+    NoteItem::setActiveItem(noteItem);
+    ui->action_Save_Note->setEnabled(true);
+    resizeEvent(0);
+}
 void MainWindow::editActiveNote()
 {
     NoteItem* activeItem = NoteItem::getActiveItem();
-    activeItem->setReadOnly(false);
+    int noteId = activeItem->getNoteId();
+
+    NoteItem *noteItem = new NoteItem(ui->noteList,noteId,false, activeItem->isRich());
+    ui->noteList->clear();
+    ui->noteList->addNote(noteItem);
+    noteItem->autoSize();
+    NoteItem::setActiveItem(noteItem);
     ui->action_Save_Note->setEnabled(true);
+    resizeEvent(0);
 }
 void MainWindow::saveNote()
 {
@@ -810,7 +828,7 @@ void MainWindow::changeLanguage()
 void MainWindow::usage()
 {
     QFile file;
-    file.setFileName(":/help.htm");
+    file.setFileName(":/help.html");
     file.open(QIODevice::ReadOnly);
     QString helpString = file.readAll();
     file.close();

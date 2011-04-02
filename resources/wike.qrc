@@ -12,6 +12,15 @@
         <file>html.png</file>
         <file>wike.png</file>
         <file>search.png</file>
-        <file>help.htm</file>
-        </qresource>
+        <file>help.html</file>
+
+        <file>jquery.cleditor.css</file>
+        <file>jquery.min.js</file>
+        <file>jquery.cleditor.min.js</file>
+        <file>jquery.cleditor.advancedtable.min.js</file>
+        <file>editor.html</file>
+        <file>images/buttons.gif</file>
+        <file>images/toolbar.gif</file>
+        <file>images/table.gif</file>
+    </qresource>
 </RCC>

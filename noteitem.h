@@ -3,51 +3,42 @@
 
 #include <QtGUI>
 #include <QtSQL>
+#include <QtWebKit>
 #include <QtNetwork>
-class ContentWidget : public QTextBrowser
+class RendererReply : public QNetworkReply
 {
     Q_OBJECT
-    public:
-        ContentWidget(QWidget* parent = 0);
-        bool canInsertFromMimeData(const QMimeData* source) const;
-        void insertFromMimeData(const QMimeData* source);
-        void setContent(const QString& str);
-        QString getContent();
-        void toggleView();
-        bool isHTMLView();
+public:
+    RendererReply(QObject* object, const QNetworkRequest& request);
+    qint64 readData(char* data, qint64 maxSize);
+    virtual qint64 bytesAvailable() const;
+    virtual qint64 pos () const;
+    virtual bool seek( qint64 pos );
+    virtual qint64 size () const;
 
-    private slots:
-        void Finished(int requestId, bool error);
-    private:
-        void dropImage(const QImage& image);
-        void dropTextFile(const QUrl& url, const QString& ext);
-        void addImageUrl(const QString& str);
-        QByteArray m_bytes;
-        QBuffer *m_buffer;
-        QHttp *m_http;
-        int m_req;
-
-        int m_viewType; //0: plaintext; 1: html
-        QString m_htmlCode;
-        QStringList m_urls;
+public slots:
+    void abort();
+private:
+    QByteArray m_buffer;
+    int m_position;
 };
 
 class NoteItem : public QFrame
 {
     Q_OBJECT
     public:
-        NoteItem(QWidget *parent = 0, int row = 0, bool readOnly = true);
+        NoteItem(QWidget *parent = 0, int row = 0, bool readOnly = true, bool rich = true);
         int getNoteId() const;
         void setFont(const QFont& font);
         static NoteItem* getActiveItem();
         static void setActiveItem(NoteItem* item);
         void autoSize();
-        void setReadOnly(bool readOnly);
+        void initControls();
         bool isReadOnly();
+        bool isRich();
         bool saveNote();
         bool close();
         void toggleView();
-        void cancelEdit();
 
     private:
         bool eventFilter(QObject *obj, QEvent *ev);
@@ -55,19 +46,23 @@ class NoteItem : public QFrame
         static NoteItem* s_activeNote;
         QSqlQuery* m_q;
         int m_noteId;
-        int m_widgetState; //0: uninitialized; 1: readOny; 2: editable
+        bool m_readOnly;
+        bool m_rich;
         bool m_sized;
         int m_totalLine;
 
         QVBoxLayout * m_verticalLayout;
         QLabel *m_title;
+        QString m_content;
+        QTextBrowser* m_textBrowser;
+
         QLineEdit *m_titleEdit;
         QLineEdit *m_tagEdit;
-        QWidget* m_titleWidget;
-        ContentWidget* m_contentWidget;
+        QPlainTextEdit* m_textEdit;
+        QWebView* m_webView;
+        QMap<QString, QImage> m_images;
 
         void active();
-        void populate();
         void loadResource();
         void exportFile();
 };

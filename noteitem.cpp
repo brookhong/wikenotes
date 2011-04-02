@@ -1,264 +1,179 @@
 #include "noteitem.h"
 #include "highlighter.h"
 #include "mainwindow.h"
-ContentWidget::ContentWidget(QWidget* parent) : QTextBrowser(parent)
+RendererReply::RendererReply(QObject* object, const QNetworkRequest& request)
+    : QNetworkReply(object)
+      , m_position(0)
 {
-    m_viewType = 0;
-    m_http = new QHttp(this);
-    m_buffer = new QBuffer(&m_bytes);
-    connect(m_http, SIGNAL(requestFinished(int, bool)),this, SLOT(Finished(int, bool)));
-    setAcceptRichText((m_viewType == 1));
-    setStyleSheet(".ContentWidget { background:url(:/text.png)}");
-}
-bool ContentWidget::canInsertFromMimeData(const QMimeData* source) const
-{
-    return (source->hasImage() || source->hasUrls() ||
-        QTextEdit::canInsertFromMimeData(source));
-}
-void ContentWidget::addImageUrl(const QString& str)
-{
-    if(m_urls.empty()) {
-        QUrl url(str);
-        m_http->setHost(url.host());
-        m_buffer->open(QIODevice::WriteOnly);
-        m_req = m_http->get(url.path(), m_buffer);
-    }
-    m_urls.append(str);
-}
-void ContentWidget::Finished(int requestId, bool error)
-{
-    if(m_req == requestId) {
-        QImage image;
-        image.loadFromData(m_bytes);
+    setRequest(request);
+    setOperation(QNetworkAccessManager::GetOperation);
+    setHeader(QNetworkRequest::ContentTypeHeader,QVariant("image/png"));
+    open(ReadOnly|Unbuffered);
+    setUrl(request.url());
 
-        m_buffer->close();
-        QString str = m_urls.takeFirst();
-        QByteArray imgBlock((const char *)image.bits(), image.byteCount());
-        QByteArray sha1Sum = QCryptographicHash::hash(imgBlock, QCryptographicHash::Sha1);
-        QString imgName = sha1Sum.toHex();
-        m_htmlCode = m_htmlCode.replace(QRegExp(str),imgName);
-        document()->addResource(QTextDocument::ImageResource, imgName, image);
-        setHtml(m_htmlCode);
-        m_viewType = 1;
-        setStyleSheet(".ContentWidget { background:url(:/html.png)}");
-
-        if(!m_urls.empty()) {
-            QUrl url(m_urls.first());
-            m_http->setHost(url.host());
-            m_buffer->open(QIODevice::WriteOnly);
-            m_req = m_http->get(url.path(), m_buffer);
-        }
-    }
+    QString fileName = request.url().host();
+    g_mainWindow->loadImageFromDB(fileName, m_buffer);
+    setHeader(QNetworkRequest::ContentTypeHeader, "image/png");
+    m_position = 0;
+    QTimer::singleShot(0, this, SIGNAL(readyRead()));
+    QTimer::singleShot(0, this, SIGNAL(finished()));
 }
-void ContentWidget::insertFromMimeData(const QMimeData* source)
+qint64 RendererReply::readData(char* data, qint64 maxSize)
 {
-    if (source->hasImage())
+    const qint64 readSize = qMin(maxSize, (qint64)(m_buffer.size() - m_position));
+    memcpy(data, m_buffer.constData() + m_position, readSize);
+    m_position += readSize;
+    return readSize;
+}
+
+qint64 RendererReply::bytesAvailable() const
+{
+    return m_buffer.size() - m_position;
+}
+
+qint64 RendererReply::pos () const
+{
+    return m_position;
+}
+
+bool RendererReply::seek( qint64 pos )
+{
+    if (pos < 0 || pos >= m_buffer.size())
+        return false;
+    m_position = pos;
+    return true;
+}
+
+qint64 RendererReply::size () const
+{
+    return m_buffer.size();
+}
+
+void RendererReply::abort()
+{
+}
+
+class UrlBasedRenderer : public QNetworkAccessManager
+{
+public:
+    UrlBasedRenderer(QObject* parent = 0) : QNetworkAccessManager(parent)
     {
-        dropImage(qvariant_cast<QImage>(source->imageData()));
-    }
-    else if (source->hasUrls())
-    {
-        foreach (QUrl url, source->urls())
-        {
-            QFileInfo info(url.toLocalFile());
-            if (QImageReader::supportedImageFormats().contains(info.suffix().toLower().toLatin1()))
-                dropImage(QImage(info.filePath()));
-            else
-                dropTextFile(url, info.suffix());
-        }
-    }
-    else if (source->hasHtml())
-    {
-        m_htmlCode = source->html();
-        m_htmlCode = m_htmlCode.replace(QRegExp("^<!--StartFragment-->"),"");
-        m_htmlCode = m_htmlCode.replace(QRegExp("<!--EndFragment-->$"),"");
-        QRegExp rx("<img[^>]*src=\"(http://[^\"]+)\"[^>]*>");
-        int pos = 0;
-        QString url;
-        while ((pos = rx.indexIn(m_htmlCode, pos)) != -1) {
-            url = rx.cap(1);
-            addImageUrl(url);
-            pos += rx.matchedLength();
-        }
-        QTextEdit::insertFromMimeData(source);
-    }
-    else
-    {
-        QString text = source->text();
-        QTextEdit::insertFromMimeData(source);
     }
 
-}
-void ContentWidget::dropImage(const QImage& image)
-{
-    if (!image.isNull())
+    virtual QNetworkReply *createRequest(Operation op, const QNetworkRequest &request, QIODevice *outgoingData)
     {
-        QByteArray imgBlock((const char *)image.bits(), image.byteCount());
-        QByteArray sha1Sum = QCryptographicHash::hash(imgBlock, QCryptographicHash::Sha1);
-        QString imgName = sha1Sum.toHex();
-        document()->addResource(QTextDocument::ImageResource, imgName, image);
-        if(m_viewType)
-            textCursor().insertImage(imgName);
-        else
-            textCursor().insertText("<img src=\""+imgName+"\" />");
+        if (request.url().scheme() != "wike")
+            return QNetworkAccessManager::createRequest(op, request, outgoingData);
+        return new RendererReply(this, request);
     }
-}
-void ContentWidget::dropTextFile(const QUrl& url, const QString& ext)
-{
-    QFile file(url.toLocalFile());
-    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QByteArray data = file.readAll();
-        QString str;
-        if(ext == "html" || ext == "htm") {
-            QTextCodec *codec = Qt::codecForHtml(data);
-            str = codec->toUnicode(data);
-        }
-        else
-            str = QString::fromLocal8Bit(data);
-        if(m_viewType)
-            textCursor().insertText("<pre>"+str+"</pre>");
-        else
-            textCursor().insertText(str);
-    }
-}
-void ContentWidget::setContent(const QString& str)
-{
-    document()->clear();
-    if(Qt::mightBeRichText(str)) {
-        m_htmlCode = str;
-        setHtml(str);
-        m_viewType = 1;
-        setStyleSheet(".ContentWidget { background:url(:/html.png)}");
-    }
-    else {
-        m_viewType = 0;
-        setPlainText(str);
-        setStyleSheet(".ContentWidget { background:url(:/text.png)}");
-    }
-
-    if(MainWindow::s_query.length())
-        find(MainWindow::s_query);
-}
-QString ContentWidget::getContent()
-{
-    QString ret;
-    if(m_viewType) {
-        ret = m_htmlCode;
-        if(ret.isEmpty())
-            ret = toHtml();
-    }
-    else {
-        ret = toPlainText();
-    }
-    /*
-    QVector<QTextFormat> fmts = m_contentWidget->document()->allFormats();
-    int fmtc = fmts.size();
-    if(fmtc > 3) {
-        content = m_contentWidget->toHtml();
-    }
-    else {
-        content = m_contentWidget->toPlainText();
-    }
-    */
-    return ret;
-}
-void ContentWidget::toggleView()
-{
-    if(m_viewType) {
-        if(m_htmlCode.isEmpty())
-            m_htmlCode = toHtml();
-        setPlainText(m_htmlCode);
-        setStyleSheet(".ContentWidget { background:url(:/text.png)}");
-    }
-    else {
-        m_htmlCode = toPlainText();
-        setHtml(m_htmlCode);
-        setStyleSheet(".ContentWidget { background:url(:/html.png)}");
-    }
-    m_viewType = !m_viewType;
-    setAcceptRichText((m_viewType == 1));
-    setLineWrapColumnOrWidth(lineWrapColumnOrWidth());
-}
-bool ContentWidget::isHTMLView()
-{
-    return (m_viewType == 1);
-}
+};
 
 NoteItem* NoteItem::s_activeNote = 0;
-NoteItem::NoteItem(QWidget *parent, int row, bool readOnly) :
+NoteItem::NoteItem(QWidget *parent, int row, bool readOnly, bool rich) :
     QFrame(parent)
 {
     m_noteId = row;
-    m_widgetState = 0;
-
-    m_title = new QLabel(this);
-    m_title->setObjectName(QString::fromUtf8("title"));
-    m_title->setWordWrap(true);
-    m_title->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-
-    QFont font;
-    font.setPointSize(12);
-    font.setBold(true);
-    
-    m_titleEdit = new QLineEdit(this);
-    m_titleEdit->setObjectName(QString::fromUtf8("titleEdit"));
-    m_titleEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    m_titleEdit->setFont(font);
-    m_titleEdit->setText(tr("Untitled"));
-
-    m_tagEdit = new QLineEdit(this);
-    m_tagEdit->setObjectName(QString::fromUtf8("tagEdit"));
-    m_tagEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    m_tagEdit->setFont(font);
-    m_tagEdit->setText(tr("Untagged"));
-
-    m_contentWidget = new ContentWidget(this);
-    m_contentWidget->setOpenExternalLinks(true);
-    m_contentWidget->setFont(MainWindow::s_font);
-    m_contentWidget->installEventFilter(this);
+    m_readOnly = readOnly;
+    m_rich = rich;
+    m_sized = false;
+    m_q = g_mainWindow->getSqlQuery();
     installEventFilter(this);
 
     m_verticalLayout = new QVBoxLayout(this);
     m_verticalLayout->setSpacing(0);
     m_verticalLayout->setContentsMargins(0, 0, 0, 0);
-    m_verticalLayout->addWidget(m_contentWidget);
-    setReadOnly(readOnly);
-
-    setFont(MainWindow::s_font);
     setStyleSheet(".NoteItem { background-color : white; padding: 6px; }");
-    m_q = g_mainWindow->getSqlQuery();
-    if(m_noteId > 0) 
-        populate();
-    m_sized = false;
+
+    initControls();
     resize(parentWidget()->width() - 32, 240);
 }
-void NoteItem::setReadOnly(bool readOnly)
+void NoteItem::initControls()
 {
-    if(readOnly) {
-        if(m_widgetState == 1)
-            return;
-        m_title->show();
-        m_titleEdit->hide();
-        m_tagEdit->hide();
-        m_titleWidget = m_title;
-        m_widgetState = 1;
+    QString rowId, title = tr("Untitled"), tag = tr("Untagged"), created;
+    if(m_noteId > 0) {
+        m_q->exec(QString("select rowid,title,content,tag,created from notes left join notes_attr on notes.rowid=notes_attr.rowid where rowid=%1").arg(m_noteId));
+        m_q->first();
+        rowId = m_q->value(0).toString();
+        title = m_q->value(1).toString();
+        m_content = m_q->value(2).toString();
+        tag = m_q->value(3).toString();
+        created = m_q->value(4).toString();
+        m_rich = Qt::mightBeRichText(m_content);
+        m_totalLine = m_content.count('\n');;
+    }
+
+    if(m_readOnly) {
+        m_title = new QLabel(this);
+        m_title->setObjectName(QString::fromUtf8("title"));
+        m_title->setWordWrap(true);
+        m_title->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        m_title->setText("<h2>"+Qt::escape(title)+"</h2><table width='100%'><tr><td align='left' width='40%'>"+tag+"</td><td align='center' width='20%'>"+rowId+"</td><td align='right' width='40%'>"+created+"</td></tr></table>");
+
+        m_textBrowser = new QTextBrowser(this);
+        m_textBrowser->setObjectName(QString::fromUtf8("m_textBrowser"));
+        m_textBrowser->setOpenExternalLinks(true);
+        m_textBrowser->setFont(MainWindow::s_font);
+        m_textBrowser->installEventFilter(this);
+
+        if(m_rich) {
+            m_textBrowser->setHtml(m_content);
+            m_textBrowser->setStyleSheet("#m_textBrowser { background:url(:/html.png)}");
+        }
+        else {
+            m_textBrowser->setPlainText(m_content);
+            m_textBrowser->setStyleSheet("#m_textBrowser { background:url(:/text.png)}");
+        }
+        if(MainWindow::s_query.length())
+            m_textBrowser->find(MainWindow::s_query);
+
+        m_verticalLayout->addWidget(m_title);
+        m_verticalLayout->addWidget(m_textBrowser);
     }
     else {
-        if(m_widgetState == 2)
-            return;
-        m_title->hide();
-        m_titleEdit->show();
-        m_tagEdit->show();
-        m_titleWidget = m_titleEdit;
-        m_widgetState = 2;
+        QFont font;
+        font.setPointSize(12);
+        font.setBold(true);
+
+        m_titleEdit = new QLineEdit(this);
+        m_titleEdit->setObjectName(QString::fromUtf8("titleEdit"));
+        m_titleEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        m_titleEdit->setFont(font);
+        m_titleEdit->setText(title);
+        m_verticalLayout->addWidget(m_titleEdit);
+
+        if(m_rich) {
+            m_webView = new QWebView(this);
+            m_webView->page()->setNetworkAccessManager(new UrlBasedRenderer);
+            QFile file(":/editor.html");
+            file.open(QIODevice::ReadOnly);
+            QString html = file.readAll();
+            html = html.replace(QRegExp("CONTENT_PLACEHOLDER"),m_content);
+            m_webView->setHtml(html);
+            m_verticalLayout->addWidget(m_webView);
+        }
+        else {
+            m_textEdit = new QPlainTextEdit(this);
+            m_textEdit->setFont(MainWindow::s_font);
+            m_textEdit->setPlainText(m_content);
+            m_verticalLayout->addWidget(m_textEdit);
+        }
+
+        m_tagEdit = new QLineEdit(this);
+        m_tagEdit->setObjectName(QString::fromUtf8("tagEdit"));
+        m_tagEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        m_tagEdit->setFont(font);
+        m_tagEdit->setText(tag);
         m_verticalLayout->addWidget(m_tagEdit);
     }
-    m_verticalLayout->insertWidget(0, m_titleWidget);
-    m_contentWidget->setReadOnly(readOnly);
+    loadResource();
 }
 bool NoteItem::isReadOnly()
 {
-    return (m_widgetState == 1);
+    return m_readOnly;
+}
+bool NoteItem::isRich()
+{
+    return m_rich;
 }
 int NoteItem::getNoteId() const
 {
@@ -266,19 +181,21 @@ int NoteItem::getNoteId() const
 }
 void NoteItem::exportFile()
 {
-    QString fileName = m_titleEdit->text();
-    QString content = m_contentWidget->getContent();
-    fileName = fileName.replace(QRegExp("[\\\\/:*?\"<>|]"),"_");
+    m_q->exec(QString("select title from notes where rowid=%1").arg(m_noteId));
+    m_q->first();
+    QString fileName = m_q->value(0).toString();
+
+    fileName = fileName.replace(QRegExp("[\\\\/:*?\"<>|]"),"_")+(m_rich?".html":".txt");
     QFile file(fileName);
     if(file.open(QIODevice::WriteOnly))
-        file.write(content.toLocal8Bit());
+        file.write(m_content.toLocal8Bit());
 
-    QRegExp rx("<img[^>]*src=\"([0-9a-f]+)\"[^>]*>");
+    QRegExp rx("<img[^>]*src=\"wike://([0-9a-f]+)\"[^>]*>");
     int pos = 0;
     QString imgName;
-    while ((pos = rx.indexIn(content, pos)) != -1) {
+    while ((pos = rx.indexIn(m_content, pos)) != -1) {
         imgName = rx.cap(1);
-        QImage image = qvariant_cast<QImage>(m_contentWidget->document()->resource(QTextDocument::ImageResource, imgName));
+        QImage image = qvariant_cast<QImage>(m_textBrowser->document()->resource(QTextDocument::ImageResource, imgName));
         QImageWriter writer(imgName+".png", "PNG");
         writer.write(image);
         pos += rx.matchedLength();
@@ -286,14 +203,22 @@ void NoteItem::exportFile()
 }
 void NoteItem::toggleView()
 {
-    m_contentWidget->toggleView();
+    if(m_rich) {
+        m_textBrowser->setPlainText(m_content);
+        m_textBrowser->setStyleSheet("#m_textBrowser { background:url(:/text.png)}");
+    }
+    else {
+        m_textBrowser->setHtml(m_content);
+        m_textBrowser->setStyleSheet("#m_textBrowser { background:url(:/html.png)}");
+    }
+    m_rich = !m_rich;
 }
 bool NoteItem::shortCut(int k)
 {
     switch(k) {
         case Qt::Key_N:
             if(MainWindow::s_query.length())
-                m_contentWidget->find(MainWindow::s_query);
+                m_textBrowser->find(MainWindow::s_query);
             return true;
         case Qt::Key_X:
             exportFile();
@@ -301,17 +226,6 @@ bool NoteItem::shortCut(int k)
         default:
             return false;
     }
-}
-void NoteItem::cancelEdit()
-{
-    if(m_noteId > 0) {
-        populate();
-        m_contentWidget->setLineWrapColumnOrWidth(m_contentWidget->lineWrapColumnOrWidth());
-        setReadOnly(true);
-        g_mainWindow->cancelEdit();
-    }
-    else
-        g_mainWindow->loadNotes();
 }
 bool NoteItem::eventFilter(QObject *obj, QEvent *ev)
 {
@@ -324,10 +238,10 @@ bool NoteItem::eventFilter(QObject *obj, QEvent *ev)
             }
             break;
         case QEvent::KeyPress:
-            if(obj==m_contentWidget && s_activeNote == this){
+            if(obj==m_textBrowser && s_activeNote == this){
                 QKeyEvent *keyEvent = static_cast<QKeyEvent*>(ev);
                 int k = keyEvent->key();
-                if(m_widgetState == 1 || keyEvent->modifiers() == Qt::AltModifier) {
+                if(m_readOnly || keyEvent->modifiers() == Qt::AltModifier) {
                     return shortCut(k);
                 }
             }
@@ -337,24 +251,12 @@ bool NoteItem::eventFilter(QObject *obj, QEvent *ev)
     }
     return QFrame::eventFilter(obj,ev);
 }
-void NoteItem::populate()
-{
-    m_q->exec(QString("select rowid,title,content,tag,created from notes left join notes_attr on notes.rowid=notes_attr.rowid where rowid=%1").arg(m_noteId));
-    m_q->first();
-    m_title->setText("<h2>"+Qt::escape(m_q->value(1).toString())+"</h2><table width='100%'><tr><td align='left' width='40%'>"+m_q->value(3).toString()+"</td><td align='center' width='20%'>"+m_q->value(0).toString()+"</td><td align='right' width='40%'>"+m_q->value(4).toString()+"</td></tr></table>");
-    m_titleEdit->setText(m_q->value(1).toString());
-    QString content = m_q->value(2).toString();
-    m_contentWidget->setContent(content);
-    m_tagEdit->setText(m_q->value(3).toString());
-    m_totalLine = content.count('\n');;
-    loadResource();
-}
 void NoteItem::setFont(const QFont& font)
 {
-    QTextCursor cursor = m_contentWidget->textCursor();
-    m_contentWidget->selectAll();
-    m_contentWidget->setFont(font);
-    m_contentWidget->setTextCursor(cursor);
+    QTextCursor cursor = m_textBrowser->textCursor();
+    m_textBrowser->selectAll();
+    m_textBrowser->setFont(font);
+    m_textBrowser->setTextCursor(cursor);
 }
 void NoteItem::autoSize()
 {
@@ -362,9 +264,9 @@ void NoteItem::autoSize()
         show();
         m_sized = true;
         int h = 600;
-        if(m_totalLine<30) {
-            QSize sz = m_contentWidget->document()->documentLayout()->documentSize().toSize();
-            h = sz.height()+m_titleWidget->height()+30;
+        if(m_readOnly && m_totalLine<30) {
+            QSize sz = m_textBrowser->document()->documentLayout()->documentSize().toSize();
+            h = sz.height()+m_title->height()+30;
             h = (h > 600)? 600 : h;
         }
         resize(width(), h);
@@ -379,7 +281,10 @@ void NoteItem::loadResource()
         buffer.open( QIODevice::ReadOnly );
         QImageReader reader(&buffer, "PNG");
         QImage image = reader.read();
-        m_contentWidget->document()->addResource(m_q->value(2).toInt(), m_q->value(0).toString(), image);
+        if(m_readOnly)
+            m_textBrowser->document()->addResource(m_q->value(2).toInt(), "wike://"+m_q->value(0).toString(), image);
+        else
+            m_images[m_q->value(0).toString()] = image;
     }
 }
 void NoteItem::setActiveItem(NoteItem* item)
@@ -388,12 +293,10 @@ void NoteItem::setActiveItem(NoteItem* item)
         s_activeNote->setStyleSheet(".NoteItem { background-color : white; padding: 6px; }");
     }
     s_activeNote = item;
-    bool htmlView = false;
-    if(s_activeNote) {
+    if(s_activeNote && s_activeNote->m_readOnly) {
         s_activeNote->active();
-        htmlView = s_activeNote->m_contentWidget->isHTMLView();
     }
-    g_mainWindow->noteSelected(s_activeNote!=0, htmlView);
+    g_mainWindow->noteSelected(s_activeNote!=0, s_activeNote && s_activeNote->m_rich);
 }
 NoteItem* NoteItem::getActiveItem()
 {
@@ -407,24 +310,51 @@ bool NoteItem::saveNote()
         QDateTime dt = QDateTime::currentDateTime();
         date = dt.toString("yyyy-MM-dd hh:mm:ss");
     }
-    QString content = m_contentWidget->getContent();
     QString title = m_titleEdit->text();
+    //m_webView->page()->mainFrame()->evaluateJavaScript(title); return false;
+    if(m_rich) {
+        QWebFrame* mainFrame = m_webView->page()->mainFrame();
+        QWebFrame* iframe = mainFrame->childFrames()[0];
+        QWebElementCollection col = iframe->findAllElements("img");
+        QString imgName;
+        QRegExp rx("\"wike://([0-9a-f]+)\"");
+        foreach (QWebElement el, col) {
+            imgName = el.attribute("src");
+            if(!rx.exactMatch(imgName)) {
+                QPixmap pix(el.geometry().size());
+                QPainter p(&pix);
+                el.render(&p);
+                QImage image = pix.toImage();
+
+                QByteArray imgBlock((const char *)image.bits(), image.byteCount());
+                QByteArray sha1Sum = QCryptographicHash::hash(imgBlock, QCryptographicHash::Sha1);
+                imgName = sha1Sum.toHex();
+                el.setAttribute("src", "wike://"+imgName);
+                m_images[imgName] = image;
+            }
+        }
+
+        m_content = mainFrame->evaluateJavaScript("editor.updateTextArea();editor.$area.val();").toString();
+        m_content = m_content.replace(QRegExp("<!--StartFragment-->"),"");
+        m_content = m_content.replace(QRegExp("<!--EndFragment-->"),"");
+    }
+    else
+        m_content = m_textEdit->toPlainText();
     QString tag = m_tagEdit->text();
     tag = tag.replace(QRegExp("^\\s+"),"");
     tag = tag.replace(QRegExp("\\s+$"),"");
     tag = tag.replace(QRegExp("\\s*,\\s*"),",");
     QStringList tags = tag.split(",");
     tags.sort();
-    ret = g_mainWindow->saveNote(m_noteId, title, content, tags, date);
+    ret = g_mainWindow->saveNote(m_noteId, title, m_content, tags, date);
     if(ret) {
         QStringList res_to_remove;
         QStringList res_to_add;
         QStringList::Iterator it;
-        //QRegExp rx("<img src=\"([0-9a-f]+)\" />");
-        QRegExp rx("<img[^>]*src=\"([0-9a-f]+)\"[^>]*>");
+        QRegExp rx("<img[^>]*src=\"wike://([0-9a-f]+)\"[^>]*>");
         int pos = 0;
         QString imgName, sql;
-        while ((pos = rx.indexIn(content, pos)) != -1) {
+        while ((pos = rx.indexIn(m_content, pos)) != -1) {
             imgName = rx.cap(1);
             if(!res_to_add.contains(imgName)) 
                 res_to_add << imgName;
@@ -456,7 +386,7 @@ bool NoteItem::saveNote()
 
         for(it = res_to_add.begin(); it != res_to_add.end(); it++) {
             imgName = *it;
-            QImage image = qvariant_cast<QImage>(m_contentWidget->document()->resource(QTextDocument::ImageResource, imgName));
+            QImage image = m_images[imgName];
 
             QBuffer buffer;
             QImageWriter writer(&buffer, "PNG");
@@ -471,8 +401,8 @@ void NoteItem::active()
 {
     setStyleSheet(".NoteItem { background-color : rgb(235,242,252); padding: 5px; border: 1px dashed blue; border-radius: 8px;}");
     if(MainWindow::s_query.length())
-        QueryHighlighter::instance().setDocument(m_contentWidget->document());
-    m_contentWidget->setFocus();
+        QueryHighlighter::instance().setDocument(m_textBrowser->document());
+    m_textBrowser->setFocus();
     g_mainWindow->ensureVisible(this);
 }
 bool NoteItem::close()

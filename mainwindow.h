@@ -64,6 +64,7 @@ class MainWindow : public QMainWindow
 
         bool insertNoteRes(QString& res_name, int noteId, int res_type, const QByteArray& res_data);
         QSqlQuery* getFoundNote(int idx);
+        void loadImageFromDB(const QString& fileName, QByteArray& imgData);
         QSqlQuery* getSqlQuery();
         void cancelEdit();
         void noteSelected(bool has, bool htmlView);
