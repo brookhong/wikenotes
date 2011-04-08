@@ -67,6 +67,16 @@ public:
         return new RendererReply(this, request);
     }
 };
+QString LocalFileDialog::selectFiles(const QString& filters) {
+    QFileDialog fileDialog(this);
+    fileDialog.setFileMode(QFileDialog::ExistingFiles);
+    QStringList flters = filters.split(",");
+    fileDialog.setNameFilters(flters);
+    if(QDialog::Accepted == fileDialog.exec()) {
+        return fileDialog.selectedFiles().join(",");
+    }
+    return "";
+}
 
 NoteItem* NoteItem::s_activeNote = 0;
 NoteItem::NoteItem(QWidget *parent, int row, bool readOnly, bool rich) :
@@ -91,13 +101,13 @@ void NoteItem::initControls()
 {
     QString rowId, title = tr("Untitled"), tag = tr("Untagged"), created;
     if(m_noteId > 0) {
-        m_q->exec(QString("select rowid,title,content,tag,created from notes left join notes_attr on notes.rowid=notes_attr.rowid where rowid=%1").arg(m_noteId));
-        m_q->first();
-        rowId = m_q->value(0).toString();
-        title = m_q->value(1).toString();
-        m_content = m_q->value(2).toString();
-        tag = m_q->value(3).toString();
-        created = m_q->value(4).toString();
+        m_q->Sql(QString("select rowid,title,content,tag,created from notes left join notes_attr on notes.rowid=notes_attr.rowid where rowid=%1").arg(m_noteId).toUtf8());
+        m_q->FetchRow();
+        rowId = QString::fromUtf8((char*)m_q->GetColumnCString(0));
+        title = QString::fromUtf8((char*)m_q->GetColumnCString(1));
+        m_content = QString::fromUtf8((char*)m_q->GetColumnCString(2));
+        tag = QString::fromUtf8((char*)m_q->GetColumnCString(3));
+        created = QString::fromUtf8((char*)m_q->GetColumnCString(4));
         m_rich = Qt::mightBeRichText(m_content);
         m_totalLine = m_content.count('\n');;
     }
@@ -149,6 +159,7 @@ void NoteItem::initControls()
             QString html = file.readAll();
             html = html.replace(QRegExp("CONTENT_PLACEHOLDER"),m_content);
             m_webView->setHtml(html);
+            m_webView->page()->mainFrame()->addToJavaScriptWindowObject("localFile", new LocalFileDialog(this));
             m_verticalLayout->addWidget(m_webView);
         }
         else {
@@ -181,21 +192,24 @@ int NoteItem::getNoteId() const
 }
 void NoteItem::exportFile()
 {
-    m_q->exec(QString("select title from notes where rowid=%1").arg(m_noteId));
-    m_q->first();
-    QString fileName = m_q->value(0).toString();
+    m_q->Sql(QString("select title from notes where rowid=%1").arg(m_noteId).toUtf8());
+    m_q->FetchRow();
+    QString fileName = QString::fromUtf8((char*)m_q->GetColumnCString(0));
 
     fileName = fileName.replace(QRegExp("[\\\\/:*?\"<>|]"),"_")+(m_rich?".html":".txt");
     QFile file(fileName);
-    if(file.open(QIODevice::WriteOnly))
-        file.write(m_content.toLocal8Bit());
+    QRegExp rx("\"wike://([0-9a-f]+)\"");
+    if(file.open(QIODevice::WriteOnly)) {
+        QString content = m_content;
+        content = content.replace(rx, "\"\\1.png\"");
+        file.write(content.toLocal8Bit());
+    }
 
-    QRegExp rx("<img[^>]*src=\"wike://([0-9a-f]+)\"[^>]*>");
     int pos = 0;
     QString imgName;
     while ((pos = rx.indexIn(m_content, pos)) != -1) {
         imgName = rx.cap(1);
-        QImage image = qvariant_cast<QImage>(m_textBrowser->document()->resource(QTextDocument::ImageResource, imgName));
+        QImage image = qvariant_cast<QImage>(m_textBrowser->document()->resource(QTextDocument::ImageResource, "wike://"+imgName));
         QImageWriter writer(imgName+".png", "PNG");
         writer.write(image);
         pos += rx.matchedLength();
@@ -274,17 +288,18 @@ void NoteItem::autoSize()
 }
 void NoteItem::loadResource()
 {
-    m_q->exec(QString("select res_name,noteid,res_type,res_data from notes_res where noteid=%1").arg(m_noteId));
-    while(m_q->next()) {
-        QByteArray imgData = m_q->value(3).toByteArray();
+    m_q->Sql(QString("select res_name,noteid,res_type,res_data from notes_res where noteid=%1").arg(m_noteId).toUtf8());
+    while(m_q->FetchRow()) {
+        QByteArray imgData = QByteArray((char*)m_q->GetColumnBlob(3), m_q->GetColumnBytes(3));
         QBuffer buffer(&imgData);
         buffer.open( QIODevice::ReadOnly );
         QImageReader reader(&buffer, "PNG");
         QImage image = reader.read();
+        QString fileName = QString::fromUtf8((char*)m_q->GetColumnCString(0));
         if(m_readOnly)
-            m_textBrowser->document()->addResource(m_q->value(2).toInt(), "wike://"+m_q->value(0).toString(), image);
+            m_textBrowser->document()->addResource(m_q->GetColumnInt(2), "wike://"+fileName, image);
         else
-            m_images[m_q->value(0).toString()] = image;
+            m_images[fileName] = image;
     }
 }
 void NoteItem::setActiveItem(NoteItem* item)
@@ -320,7 +335,7 @@ bool NoteItem::saveNote()
         QRegExp rx("\"wike://([0-9a-f]+)\"");
         foreach (QWebElement el, col) {
             imgName = el.attribute("src");
-            if(!rx.exactMatch(imgName)) {
+            if(el.attribute("embed").toLower() != "link" && !rx.exactMatch(imgName)) {
                 QPixmap pix(el.geometry().size());
                 QPainter p(&pix);
                 el.render(&p);
@@ -362,12 +377,12 @@ bool NoteItem::saveNote()
             pos += rx.matchedLength();
         }
         if(m_noteId == 0)
-            m_noteId = m_q->lastInsertId().toInt();
+            m_noteId = g_mainWindow->lastInsertId();
         else {
             sql = QString("select res_name from notes_res where noteid=%1").arg(m_noteId);
-            m_q->exec(sql);
-            while(m_q->next()) {
-                res_to_remove << m_q->value(0).toString();
+            m_q->Sql(sql.toUtf8());
+            while(m_q->FetchRow()) {
+                res_to_remove << QString::fromUtf8((char*)m_q->GetColumnCString(0));
             }
             it = res_to_remove.begin();
             while(it != res_to_remove.end()) {
@@ -381,7 +396,7 @@ bool NoteItem::saveNote()
         }
         for(it = res_to_remove.begin(); it != res_to_remove.end(); it++) {
             sql = QString("delete from notes_res where noteid=%1 and res_name='%2'").arg(m_noteId).arg(*it);
-            m_q->exec(sql);
+            m_q->SqlStatement(sql.toUtf8());
         }
 
         for(it = res_to_add.begin(); it != res_to_add.end(); it++) {

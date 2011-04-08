@@ -2,9 +2,11 @@
 #define NOTEITEM_H
 
 #include <QtGUI>
-#include <QtSQL>
 #include <QtWebKit>
 #include <QtNetwork>
+
+#include "KompexSQLiteStatement.h"
+using namespace Kompex;
 class RendererReply : public QNetworkReply
 {
     Q_OBJECT
@@ -22,7 +24,14 @@ private:
     QByteArray m_buffer;
     int m_position;
 };
-
+class LocalFileDialog : public QWidget {
+    Q_OBJECT
+public:
+    LocalFileDialog(QWidget * parent = 0) : QWidget(parent){
+    }
+public slots:
+    QString selectFiles(const QString& filters);
+};
 class NoteItem : public QFrame
 {
     Q_OBJECT
@@ -44,7 +53,7 @@ class NoteItem : public QFrame
         bool eventFilter(QObject *obj, QEvent *ev);
         bool shortCut(int k);
         static NoteItem* s_activeNote;
-        QSqlQuery* m_q;
+        SQLiteStatement* m_q;
         int m_noteId;
         bool m_readOnly;
         bool m_rich;

@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-QT       += core gui sql webkit network
+QT       += core gui webkit network
 
 VERSION = 0.3
 # Define the preprocessor macro to get the application version in our application.
@@ -12,7 +12,9 @@ DEFINES += APP_VERSION=\\\"$$VERSION\\\"
 
 TARGET = wikenotes
 TEMPLATE = app
-DEFINES += QXT_STATIC
+DEFINES += QXT_STATIC SQLITE_HAS_CODEC SQLITE_ENABLE_COLUMN_METADATA
+
+INCLUDEPATH = sqlite/inc D:/works/openssl-0.9.8k_WIN32/include
 
 SOURCES += main.cpp\
         mainwindow.cpp \
@@ -22,6 +24,9 @@ SOURCES += main.cpp\
     qxt/qxtglobalshortcut.cpp \
     qtsingleapplication/qtsingleapplication.cpp \
     qtsingleapplication/qtlocalpeer.cpp \
+    sqlite/src/sqlite3.c \
+    sqlite/src/KompexSQLiteDatabase.cpp \
+    sqlite/src/KompexSQLiteStatement.cpp \
     hotkeysettings.cpp \
     noteitem.cpp
 
@@ -42,6 +47,7 @@ RESOURCES += resources/wike.qrc
 win32 {
     SOURCES += qxt/qxtglobalshortcut_win.cpp
     RC_FILE = resources/wike.rc
+    LIBS += D:/works/openssl-0.9.8k_WIN32/lib/libeay32.lib
 }
 
 TRANSLATIONS = chinese.ts

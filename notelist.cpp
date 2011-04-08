@@ -21,12 +21,12 @@ void NoteList::extend(int num)
 }
 bool NoteList::createNote(int idx)
 {
-    QSqlQuery *q = g_mainWindow->getFoundNote(idx);
+    SQLiteStatement *q = g_mainWindow->getFoundNote(idx);
 
     bool ret = false;
-    if(q->first()) {
+    if(q->FetchRow()) {
         NoteItem* noteItem;
-        noteItem = new NoteItem(this,q->value(0).toInt(),true);
+        noteItem = new NoteItem(this,q->GetColumnInt(0),true);
         noteItem->autoSize();
         m_notes[idx] = noteItem;
         int delta = noteItem->height() - UNIT_PADDING;

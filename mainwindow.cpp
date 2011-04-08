@@ -96,7 +96,7 @@ void MainWindow::createTrayIcon()
     m_trayIcon = new QSystemTrayIcon(this);
     m_trayIcon->setContextMenu(trayIconMenu);
     m_trayIcon->setIcon(icon);
-    m_trayIcon->setToolTip(tr("WikeNotes"));
+    m_trayIcon->setToolTip("WikeNotes");
     m_trayIcon->show();
     connect(m_trayIcon, SIGNAL(activated(QSystemTrayIcon::ActivationReason)), this, SLOT(iconActivated(QSystemTrayIcon::ActivationReason)));
 }
@@ -197,7 +197,7 @@ void MainWindow::iconActivated(QSystemTrayIcon::ActivationReason reason)
             toggleVisibility();
             break;
         case QSystemTrayIcon::MiddleClick:
-            m_trayIcon->showMessage(tr("WikeNotes"), tr("help"), QSystemTrayIcon::Information, 300);
+            m_trayIcon->showMessage("WikeNotes", tr("help"), QSystemTrayIcon::Information, 300);
             break;
         default:
             break;
@@ -215,86 +215,101 @@ void MainWindow::newDB()
 
     if (!dbName.isEmpty()) {
         closeDB();
-        m_dbName = dbName;
-        openDB();
-    }
-}
-bool MainWindow::openDB()
-{
-    bool ret = false;
-    bool init = !QFile::exists(m_dbName);
-    QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", m_dbName);
-    db.setDatabaseName(m_dbName);
-    db.open();
-    m_q = new QSqlQuery(db);
-    QString defaultKey = "jessie&brook";
-    if(init) {        
-        QString password = QInputDialog::getText(this, tr("WikeNotes"),
-                tr("Would you like to protect your notes library with a password?\nCancel to set no password.\n\nPassword: "), QLineEdit::Password);
-        if (password.isEmpty()) 
-            password = defaultKey;
-        m_q->exec("PRAGMA key = '"+QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha1).toHex()+"';");
-        m_q->exec("CREATE TABLE notes(title TEXT, content TEXT, tag TEXT, hash TEXT)");
-        m_q->exec("CREATE TABLE notes_attr(rowid INTEGER PRIMARY KEY ASC, created DATETIME)");
-        m_q->exec("CREATE TABLE notes_res(res_name VARCHAR(40), noteid INTEGER, res_type INTEGER, res_data BLOB, CONSTRAINT unique_res_within_a_note UNIQUE (res_name, noteid) )");
-        ret = true;
-    }
-    else {
-        m_q->exec("PRAGMA key = '"+QCryptographicHash::hash(defaultKey.toUtf8(), QCryptographicHash::Sha1).toHex()+"';");
-        if(!m_q->exec("select rowid from notes limit 1")) {
-            do {
-                QString password = QInputDialog::getText(this, tr("WikeNotes"), tr("Password:"), QLineEdit::Password);
-                m_q->clear();
-                db.close();
-                db.open();
-                m_q->exec("PRAGMA key = '"+QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha1).toHex()+"';");
-                if(m_q->exec("select rowid from notes limit 1")) {
-                    ret = true;
-                    break;
-                }
-            }while(QMessageBox::warning(this, tr("WikeNotes"),tr("Invalid password! Try again?"),
-                        QMessageBox::Yes|QMessageBox::No) == QMessageBox::Yes);
+        if(!openDB(dbName)) {
+            QMessageBox::warning(this, "WikeNotes", tr("Failed to create notes library: %1").arg(dbName)); 
+            openDB();
         }
-        else
-            ret = true;
     }
-    if(ret) {
-        setWindowTitle(QString("WikeNotes (%1)").arg(m_dbName));
-        refreshTag();
-        loadNotes();
-    }
-    return ret;
-}
-void MainWindow::closeDB()
-{
-    delete m_q;
-    QSqlDatabase::removeDatabase(m_dbName);
 }
 void MainWindow::selectDB()
 {
     QString dbName = QFileDialog::getOpenFileName(this, tr("Open Notes Library"), ".", tr("wike files (*.wike)"));
     if (!dbName.isEmpty()) {
         closeDB();
-        m_dbName = dbName;
-        while(1) {
-            if(openDB()) {
-                if(QMessageBox::question(this,
-                            tr("WikeNotes"),
-                            tr("Use %1 as default Notes Library.").arg(m_dbName),
-                            QMessageBox::Yes|QMessageBox::No) == QMessageBox::Yes) {
-                    m_bSettings = true;
-                }
-                break;
-            }
-            m_dbName = QFileDialog::getOpenFileName(this, tr("Open Notes Library"), ".", tr("wike files (*.wike)"));
+        if(!openDB(dbName)) {
+            QMessageBox::warning(this, "WikeNotes", tr("Failed to open notes library: %1").arg(dbName)); 
+            openDB();
         }
     }
 }
-QSqlQuery* MainWindow::getSqlQuery()
+void MainWindow::openDB()
+{
+    if(!openDB(m_dbName)) {
+        QString dbName;
+        do {
+            QMessageBox::StandardButton choice = QMessageBox::warning(this, "WikeNotes",
+                    QObject::tr("Would you like to create a new Library? No to select another existing Library,  Abort to exit."),
+                    QMessageBox::Yes|QMessageBox::No|QMessageBox::Abort);
+            if(choice == QMessageBox::Yes) 
+                dbName = QFileDialog::getSaveFileName(this, QObject::tr("Create New Library"), ".", QObject::tr("wike files (*.wike)"));
+            else if(choice == QMessageBox::No)
+                dbName = QFileDialog::getOpenFileName(this, QObject::tr("Open Notes Library"), ".", QObject::tr("wike files (*.wike)"));
+            else {
+                QTimer::singleShot(0, this, SLOT(close()));
+                break;
+            }
+        }while(dbName.isEmpty() || !openDB(dbName));
+    }
+}
+bool MainWindow::openDB(const QString& dbName)
+{
+    bool ret = false;
+    bool init = !QFile::exists(dbName);
+    m_db = new SQLiteDatabase(dbName.toUtf8(), SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, 0);
+    m_q = new SQLiteStatement(m_db);
+    QString defaultKey = "jessie&brook";
+    if(init) {        
+        QString password = QInputDialog::getText(this, "WikeNotes",
+                tr("Would you like to protect your notes library with a password?\nCancel to set no password.\n\nPassword: "), QLineEdit::Password);
+        if (password.isEmpty()) 
+            password = defaultKey;
+        m_q->SqlStatement("PRAGMA key = '"+QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha1).toHex()+"';");
+        m_q->SqlStatement("CREATE TABLE notes(title TEXT, content TEXT, tag TEXT, hash TEXT)");
+        m_q->SqlStatement("CREATE TABLE notes_attr(rowid INTEGER PRIMARY KEY ASC, created DATETIME)");
+        m_q->SqlStatement("CREATE TABLE notes_res(res_name VARCHAR(40), noteid INTEGER, res_type INTEGER, res_data BLOB, CONSTRAINT unique_res_within_a_note UNIQUE (res_name, noteid) )");
+        ret = true;
+    }
+    else {
+        QString password = defaultKey;
+        int retry = 0;
+        while(retry < 3) {
+            try {
+                retry++;
+                m_q->SqlStatement("PRAGMA key = '"+QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha1).toHex()+"';");
+                m_q->Sql("select rowid from notes limit 1");
+                ret = true;
+                break;
+            }
+            catch(Kompex::SQLiteException &exception) {
+                password = QInputDialog::getText(this, "WikeNotes", tr("Password for %1:").arg(dbName), QLineEdit::Password);
+                m_db->Close();
+                m_db->Open(dbName.toUtf8(),SQLITE_OPEN_READWRITE, 0);
+            }
+        }
+    }
+    if(ret) {
+        setWindowTitle(QString("WikeNotes (%1)").arg(dbName));
+        refreshTag();
+        loadNotes();
+        m_dbName = dbName;
+    }
+    else 
+        closeDB();
+    return ret;
+}
+void MainWindow::closeDB()
+{
+    ui->noteList->clear();
+
+    delete m_q;
+    m_db->Close();
+    delete m_db;
+}
+SQLiteStatement* MainWindow::getSqlQuery()
 {
     return m_q;
 }
-QSqlQuery* MainWindow::getFoundNote(int idx)
+SQLiteStatement* MainWindow::getFoundNote(int idx)
 {
     QString sql;
     if(idx == -1)
@@ -304,14 +319,14 @@ QSqlQuery* MainWindow::getFoundNote(int idx)
             .arg(m_criterion)
             .arg(idx);
 
-    m_q->exec(sql);
+    m_q->Sql(sql.toUtf8());
     return m_q;
 }
 void MainWindow::loadImageFromDB(const QString& fileName, QByteArray& imgData)
 {
-    m_q->exec(QString("select res_name,noteid,res_type,res_data from notes_res where res_name='%1'").arg(fileName));
-    if(m_q->next()) {
-        imgData = m_q->value(3).toByteArray();
+    m_q->Sql(QString("select res_name,noteid,res_type,res_data from notes_res where res_name='%1'").arg(fileName).toUtf8());
+    if(m_q->FetchRow()) {
+        imgData = QByteArray((char*)m_q->GetColumnBlob(3), m_q->GetColumnBytes(3));
     }
 }
 void MainWindow::loadNotes()
@@ -332,15 +347,12 @@ void MainWindow::loadNotes()
         m_criterion = m_criterion.replace(QRegExp("KEYWORD"),m_tagList.join(","));
     }
     QString sql = QString("select count(*) from notes %1").arg(m_criterion);
-    if(m_q->exec(sql)) {
-        m_q->first();
-        int found = m_q->value(0).toInt();
-        ui->statusbar->showMessage(tr("%1 notes found").arg(found));
-        ui->noteList->extend(found);
-        ui->noteList->update();
-        ui->noteList->adjustSize();
-        resizeEvent(0);
-    }
+    int found = m_q->SqlAggregateFuncResult(sql.toUtf8());
+    ui->statusbar->showMessage(tr("%1 notes found").arg(found));
+    ui->noteList->extend(found);
+    ui->noteList->update();
+    ui->noteList->adjustSize();
+    resizeEvent(0);
 }
 void MainWindow::instantSearch(const QString& query)
 {
@@ -372,8 +384,8 @@ int MainWindow::insertNote(QString& title, QString& content, QString& tag, QStri
 {
     int ret = 2;
     QString sql = "select rowid from notes where hash='"+hashKey+"'";
-    m_q->exec(sql);
-    if(m_q->first()) {
+    m_q->Sql(sql.toUtf8());
+    if(m_q->FetchRow()) {
         ret = 1;
     }
     else {
@@ -384,23 +396,26 @@ int MainWindow::insertNote(QString& title, QString& content, QString& tag, QStri
         sql += content+"','";
         sql += tag+"','";
         sql += hashKey+"')";
-        if(m_q->exec(sql)) {
-            ret = 0;
-            sql = QString("INSERT INTO notes_attr(created) VALUES('%1')").arg(datetime);
-            m_q->exec(sql);
-        }
+        m_q->SqlStatement(sql.toUtf8());
+        sql = QString("INSERT INTO notes_attr(created) VALUES('%1')").arg(datetime);
+        m_q->SqlStatement(sql.toUtf8());
+        ret = 0;
     }
     return ret;
 }
 bool MainWindow::insertNoteRes(QString& res_name, int noteId, int res_type, const QByteArray& res_data)
 {
-    m_q->clear();
-    m_q->prepare("INSERT INTO notes_res(res_name,noteid,res_type,res_data) values (:res_name, :noteid, :res_type, :res_data)");
-    m_q->bindValue(":res_name",res_name);
-    m_q->bindValue(":noteid",noteId);
-    m_q->bindValue(":res_type",res_type);
-    m_q->bindValue(":res_data", res_data);
-    return m_q->exec();
+    m_q->Sql("INSERT INTO notes_res(res_name,noteid,res_type,res_data) values (?, ?, ?, ?)");
+    m_q->BindString(1,res_name.toStdString());
+    m_q->BindInt(2,noteId);
+    m_q->BindInt(3,res_type);
+    m_q->BindBlob(4, res_data.data(), res_data.size());
+    m_q->ExecuteAndFree();
+    return true;
+}
+int MainWindow::lastInsertId()
+{
+    return m_db->GetLastInsertRowId();
 }
 bool MainWindow::saveNote(int row, QString& title, QString& content, QStringList& tags, QString& datetime)
 {
@@ -414,8 +429,8 @@ bool MainWindow::saveNote(int row, QString& title, QString& content, QStringList
         }
         if(row > 0) {
             QString sql = "select rowid from notes where hash='"+hashKey+"'";
-            m_q->exec(sql);
-            if(m_q->first() && m_q->value(0).toInt() != row) {
+            m_q->Sql(sql.toUtf8());
+            if(m_q->FetchRow() && m_q->GetColumnInt(0) != row) {
                 statusMessage(tr("There exists a note with the same content, thus I will NOT same this one."));
             }
             else {
@@ -433,18 +448,17 @@ bool MainWindow::saveNote(int row, QString& title, QString& content, QStringList
                 ups << "tag='"+tags.join(",")+"'";
                 sql += ups.join(",");
                 sql += QString(" WHERE rowid=%1").arg(row);
-                ret = m_q->exec(sql);
-                if(ret) {
-                    int oldTagSize = oldTags.size();
-                    for(i=0; i<oldTagSize; ++i) {
-                        if(getTagCount(oldTags[i]) == 0)
-                            emit tagRemoved(oldTags[i]);
-                    }
-                    for(i=0; i<tagSize; ++i) {
-                        if(newTagCount[i] == 0)
-                            emit tagAdded(tags[i]);
-                    }
+                m_q->SqlStatement(sql.toUtf8());
+                int oldTagSize = oldTags.size();
+                for(i=0; i<oldTagSize; ++i) {
+                    if(getTagCount(oldTags[i]) == 0)
+                        emit tagRemoved(oldTags[i]);
                 }
+                for(i=0; i<tagSize; ++i) {
+                    if(newTagCount[i] == 0)
+                        emit tagAdded(tags[i]);
+                }
+                ret = true;
             }
         }
         else {
@@ -456,6 +470,8 @@ bool MainWindow::saveNote(int row, QString& title, QString& content, QStringList
                         emit tagAdded(tags[i]);
                 }
             }
+            else
+                statusMessage(tr("There exists a note with the same content, thus I will NOT same this one."));
         }
         delete newTagCount;
     }
@@ -497,9 +513,9 @@ QStringList MainWindow::getTagsOf(int row)
 {
     QStringList tags;
     QString sql = QString("select tag from notes where rowid=%1").arg(row);
-    if(m_q->exec(sql)) {
-        m_q->first();
-        tags = m_q->value(0).toString().split(",");
+    m_q->Sql(sql.toUtf8());
+    if(m_q->FetchRow()) {
+        tags = QString::fromUtf8((char*)m_q->GetColumnCString(0)).split(",");
     }
     return tags;
 }
@@ -508,9 +524,9 @@ int MainWindow::getTagCount(const QString& tag)
     int ret = 0;
     QString sql = QString("select count(*) from notes where (%1)").arg(tag_like);
     sql = sql.replace(QRegExp("KEYWORD"),tag);
-    if(m_q->exec(sql)) {
-        m_q->first();
-        ret = m_q->value(0).toInt();
+    m_q->Sql(sql.toUtf8());
+    if(m_q->FetchRow()) {
+        ret = m_q->GetColumnInt(0);
     }
     return ret;
 }
@@ -551,18 +567,18 @@ bool MainWindow::delActiveNote()
     if(row > 0) {
         QStringList oldTags = getTagsOf(row);
         QString sql = QString("delete from notes where rowid=%1").arg(row);
-        if(m_q->exec(sql)) {
-            sql = QString("delete from notes_attr where rowid=%1").arg(row);
-            ret = m_q->exec(sql);
-            sql = QString("delete from notes_res where noteid=%1").arg(row);
-            ret = m_q->exec(sql);
+        m_q->SqlStatement(sql.toUtf8());
+        sql = QString("delete from notes_attr where rowid=%1").arg(row);
+        m_q->SqlStatement(sql.toUtf8());
+        sql = QString("delete from notes_res where noteid=%1").arg(row);
+        m_q->SqlStatement(sql.toUtf8());
 
-            int i, oldTagSize = oldTags.size();
-            for(i=0; i<oldTagSize; ++i) {
-                if(getTagCount(oldTags[i]) == 0)
-                    emit tagRemoved(oldTags[i]);
-            }
+        int i, oldTagSize = oldTags.size();
+        for(i=0; i<oldTagSize; ++i) {
+            if(getTagCount(oldTags[i]) == 0)
+                emit tagRemoved(oldTags[i]);
         }
+        ret = true;
     }
     else
         ret = true;
@@ -616,9 +632,10 @@ void MainWindow::importDone(int action)
 void MainWindow::refreshTag()
 {
     QStringList tagList;
-    m_q->exec("select distinct tag from notes");
-    while(m_q->next()) {
-        tagList << m_q->value(0).toString().split(",");
+    m_q->Sql("select distinct tag from notes");
+    QString tag;
+    while(m_q->FetchRow()) {
+        tagList << QString::fromUtf8((char*)m_q->GetColumnCString(0)).split(",");
     }
     tagList.sort();
     tagList.removeDuplicates();
@@ -666,11 +683,11 @@ void NotesImporter::run()
             QString title,datetime,link,tag,content,hashKey,res_name,res_type;
             int res_flag = 0;
             QByteArray res_data;
-            QSqlQuery *q = g_mainWindow->getSqlQuery();
-            q->exec("select rowid from notes order by rowid desc limit 1");
+            SQLiteStatement *q = g_mainWindow->getSqlQuery();
+            q->Sql("select rowid from notes order by rowid desc limit 1");
             int noteId = 1;
-            if(q->first())
-                noteId = q->value(0).toInt()+1;
+            if(q->FetchRow())
+                noteId = q->GetColumnInt(0)+1;
             while (!xml.atEnd()) {
                 if (xml.isStartElement()) {
                     if(xml.name() == "note") {
@@ -731,23 +748,25 @@ void NotesImporter::run()
 
             writer.writeStartElement("wikenotes");
 
-            QSqlQuery* q = g_mainWindow->getFoundNote(-1);
-            QSqlQuery q_res(*q);
+            SQLiteStatement* q = g_mainWindow->getFoundNote(-1);
+            SQLiteStatement q_res(*q);
             int noteId;
-            while(q->next()) {
-                noteId = q->value(0).toInt();
+            while(q->FetchRow()) {
+                noteId = q->GetColumnInt(0);
                 writer.writeStartElement("note");
-                writer.writeAttribute("title", q->value(1).toString());
-                writer.writeAttribute("tags", q->value(3).toString());
-                writer.writeAttribute("created", q->value(4).toString());
-                writer.writeCDATA(q->value(2).toString());
+                writer.writeAttribute("title", QString::fromUtf8((char*)q->GetColumnCString(1)));
+                writer.writeAttribute("tags", QString::fromUtf8((char*)q->GetColumnCString(3)));
+                writer.writeAttribute("created", QString::fromUtf8((char*)q->GetColumnCString(4)));
+                writer.writeCDATA(QString::fromUtf8((char*)q->GetColumnCString(2)));
 
-                q_res.exec(QString("select res_name,res_type,res_data from notes_res where noteid=%1").arg(noteId));
-                while(q_res.next()) {
+                q_res.Sql(QString("select res_name,res_type,res_data from notes_res where noteid=%1").arg(noteId).toUtf8());
+                QByteArray res_data;
+                while(q_res.FetchRow()) {
                     writer.writeStartElement("resource");
-                    writer.writeAttribute("name", q_res.value(0).toString());
-                    writer.writeAttribute("type", q_res.value(1).toString());
-                    writer.writeCDATA(q_res.value(2).toByteArray().toBase64());
+                    writer.writeAttribute("name", QString::fromUtf8((char*)q_res.GetColumnCString(0)));
+                    writer.writeAttribute("type", QString::fromUtf8((char*)q_res.GetColumnCString(1)));
+                    res_data = QByteArray((char*)q_res.GetColumnBlob(2), q_res.GetColumnBytes(2));
+                    writer.writeCDATA(res_data.toBase64());
                     writer.writeEndElement();
                 }
 
@@ -844,7 +863,7 @@ void MainWindow::usage()
 }
 void MainWindow::about()
 {
-    QMessageBox::about(this, tr("WikeNotes"), tr("Version: "APP_VERSION"\nAuthor: hzgmaxwell@hotmail.com"));
+    QMessageBox::about(this, "WikeNotes", tr("Version: "APP_VERSION"\nAuthor: hzgmaxwell@hotmail.com"));
 }
 void MainWindow::cancelEdit()
 {

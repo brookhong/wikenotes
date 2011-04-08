@@ -2,10 +2,18 @@
 #define MAINWINDOW_H
 
 #include <QtGUI>
-#include <QtSQL>
 
 #include "noteitem.h"
 #include "qxt/qxtglobalshortcut.h"
+
+#include "KompexSQLitePrerequisites.h"
+#include "KompexSQLiteDatabase.h"
+#include "KompexSQLiteStatement.h"
+#include "KompexSQLiteException.h"
+#include "KompexSQLiteStreamRedirection.h"
+
+using namespace Kompex;
+
 namespace Ui {
     class MainWindow;
 }
@@ -56,16 +64,18 @@ class MainWindow : public QMainWindow
     public:
         explicit MainWindow(QWidget *parent = 0);
         ~MainWindow();
-        bool openDB();
+        void openDB();
+        bool openDB(const QString& name);
+        int lastInsertId();
         bool saveNote(int row, QString& title, QString& content, QStringList& tags, QString& datetime);
 
         //0: success; 1: already exists; 2: other error
         int insertNote(QString& title, QString& content, QString& tag, QString& hashKey, QString& datetime);
 
         bool insertNoteRes(QString& res_name, int noteId, int res_type, const QByteArray& res_data);
-        QSqlQuery* getFoundNote(int idx);
+        SQLiteStatement* getFoundNote(int idx);
         void loadImageFromDB(const QString& fileName, QByteArray& imgData);
-        QSqlQuery* getSqlQuery();
+        SQLiteStatement* getSqlQuery();
         void cancelEdit();
         void noteSelected(bool has, bool htmlView);
         void ensureVisible(NoteItem* item);
@@ -122,7 +132,8 @@ class MainWindow : public QMainWindow
         QString m_lang;
 
         QStringListModel *m_tagModel;
-        QSqlQuery* m_q;
+        SQLiteDatabase* m_db;
+        SQLiteStatement* m_q;
         void closeDB();
 
         QStringList m_tagList;

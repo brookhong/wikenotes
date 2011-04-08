@@ -12,9 +12,7 @@ int main(int argc, char *argv[])
     MainWindow w;
     g_mainWindow = &w;
     w.show();
-    if(!w.openDB()) {
-        w.newDB();
-    }
+    w.openDB();
     QObject::connect(&a, SIGNAL(messageReceived(const QString&)),&w, SLOT(handleSingleMessage(const QString&)));
     return a.exec();
 }
