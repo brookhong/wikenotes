@@ -123,6 +123,14 @@ void MainWindow::loadSettings()
                     QXmlStreamAttributes attrs = xml.attributes();
                     m_lang = attrs.value("name").toString();
                 }
+                else if(xml.name() == "external_command") {
+                    QXmlStreamAttributes attrs = xml.attributes();
+                    QAction* action = new QAction(attrs.value("name").toString(), this);
+                    action->setData(attrs.value("command").toString());
+                    action->setShortcut(QKeySequence(attrs.value("shortcut").toString()));
+                    connect(action, SIGNAL(triggered()), this, SLOT(extActions()));
+                    m_extActions.append(action);
+                }
             }
             xml.readNext();
         }
@@ -159,6 +167,16 @@ void MainWindow::flushSettings()
                 writer.writeStartElement("toggle_main_window");
                 writer.writeAttribute("shortcut", m_hkToggleMain->shortcut().toString());
                 writer.writeEndElement();
+            writer.writeEndElement();
+
+            writer.writeStartElement("external_commands");
+                for (int i = 0; i < m_extActions.size(); ++i) {
+                    writer.writeStartElement("external_command");
+                    writer.writeAttribute("name", m_extActions[i]->text());
+                    writer.writeAttribute("command", m_extActions[i]->data().toString());
+                    writer.writeAttribute("shortcut", m_extActions[i]->shortcut().toString());
+                    writer.writeEndElement();
+                }
             writer.writeEndElement();
 
         writer.writeEndElement();
@@ -238,12 +256,12 @@ void MainWindow::openDB()
         QString dbName;
         do {
             QMessageBox::StandardButton choice = QMessageBox::warning(this, "WikeNotes",
-                    QObject::tr("Would you like to create a new Library? No to select another existing Library,  Abort to exit."),
+                    tr("Would you like to create a new Library? No to select another existing Library,  Abort to exit."),
                     QMessageBox::Yes|QMessageBox::No|QMessageBox::Abort);
             if(choice == QMessageBox::Yes) 
-                dbName = QFileDialog::getSaveFileName(this, QObject::tr("Create New Library"), ".", QObject::tr("wike files (*.wike)"));
+                dbName = QFileDialog::getSaveFileName(this, tr("Create New Library"), ".", tr("wike files (*.wike)"));
             else if(choice == QMessageBox::No)
-                dbName = QFileDialog::getOpenFileName(this, QObject::tr("Open Notes Library"), ".", QObject::tr("wike files (*.wike)"));
+                dbName = QFileDialog::getOpenFileName(this, tr("Open Notes Library"), ".", tr("wike files (*.wike)"));
             else {
                 QTimer::singleShot(0, this, SLOT(close()));
                 break;
@@ -879,4 +897,50 @@ void MainWindow::noteSelected(bool has, bool htmlView)
 void MainWindow::ensureVisible(NoteItem* item)
 {
     ui->scrollArea->ensureWidgetVisible(item);
+}
+void MainWindow::extProcFinished(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    QProcess *proc = qobject_cast<QProcess*>(sender());
+    if(proc) {
+        QString fn = proc->property("file_name").toString();
+        if(fn != "") {
+            QFile::remove(fn);
+        }
+        m_extProcs.removeOne(proc);
+        delete proc;
+    }
+}
+void MainWindow::extActions()
+{
+    QAction *act = qobject_cast<QAction*>(sender());
+    QString cmdLine = act->data().toString();
+    cmdLine = cmdLine.replace("%select%", NoteItem::getActiveItem()->selectedText());
+
+    QRegExp rx("^http://.*", Qt::CaseInsensitive);
+    if(rx.exactMatch(cmdLine))
+        QDesktopServices::openUrl(QUrl(cmdLine));
+    else {
+        int s = cmdLine.indexOf("<");
+        if(s == -1)
+            QProcess::startDetached(cmdLine);
+        else {
+            QByteArray msg = cmdLine.mid(s+1).trimmed().toLocal8Bit();
+            QString fn = QDir::tempPath()+QDir::separator()+QCryptographicHash::hash(msg, QCryptographicHash::Sha1).toHex()+".txt";
+            QFile file(fn);
+            file.open(QIODevice::WriteOnly);
+            file.write(msg);
+            file.close();
+            
+            cmdLine = cmdLine.replace(s, cmdLine.size()-s, fn);
+            QProcess* proc = new QProcess;
+            proc->setProperty("file_name",fn);
+            connect(proc, SIGNAL(finished(int, QProcess::ExitStatus)), this, SLOT(extProcFinished(int, QProcess::ExitStatus)));
+            proc->start(cmdLine);
+            m_extProcs.append(proc);
+        }
+    }
+}
+const QList<QAction*>& MainWindow::getExtActions()
+{
+    return m_extActions;
 }

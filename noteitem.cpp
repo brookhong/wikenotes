@@ -68,7 +68,7 @@ public:
     }
 };
 QString LocalFileDialog::selectFiles(const QString& filters) {
-    QFileDialog fileDialog(this);
+    QFileDialog fileDialog(static_cast<QWidget*>(parent()));
     fileDialog.setFileMode(QFileDialog::ExistingFiles);
     QStringList flters = filters.split(",");
     fileDialog.setNameFilters(flters);
@@ -77,7 +77,26 @@ QString LocalFileDialog::selectFiles(const QString& filters) {
     }
     return "";
 }
-
+TextBrowser::TextBrowser(QWidget * parent) : QTextBrowser(parent)
+{
+    m_contextMenu = new QMenu(tr("External Commands"), this);
+    const QList<QAction*>& lst = g_mainWindow->getExtActions();
+    for (int i = 0; i < lst.size(); ++i) {
+        m_contextMenu->addAction(lst[i]);
+        addAction(lst[i]);
+    }
+}
+void TextBrowser::contextMenuEvent(QContextMenuEvent * event)
+{
+    QMenu* menu = createStandardContextMenu();
+    menu->addMenu(m_contextMenu);
+    menu->exec(event->globalPos());
+    delete menu;
+}
+TextBrowser::~TextBrowser()
+{
+    delete m_contextMenu;
+}
 NoteItem* NoteItem::s_activeNote = 0;
 NoteItem::NoteItem(QWidget *parent, int row, bool readOnly, bool rich) :
     QFrame(parent)
@@ -119,7 +138,7 @@ void NoteItem::initControls()
         m_title->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         m_title->setText("<h2>"+Qt::escape(title)+"</h2><table width='100%'><tr><td align='left' width='40%'>"+tag+"</td><td align='center' width='20%'>"+rowId+"</td><td align='right' width='40%'>"+created+"</td></tr></table>");
 
-        m_textBrowser = new QTextBrowser(this);
+        m_textBrowser = new TextBrowser(this);
         m_textBrowser->setObjectName(QString::fromUtf8("m_textBrowser"));
         m_textBrowser->setOpenExternalLinks(true);
         m_textBrowser->setFont(MainWindow::s_font);
@@ -226,6 +245,11 @@ void NoteItem::toggleView()
         m_textBrowser->setStyleSheet("#m_textBrowser { background:url(:/html.png)}");
     }
     m_rich = !m_rich;
+}
+QString NoteItem::selectedText()
+{
+    QString s = m_textBrowser->textCursor().selectedText().replace(QChar(0x2029), QChar('\n'));
+    return s;
 }
 bool NoteItem::shortCut(int k)
 {

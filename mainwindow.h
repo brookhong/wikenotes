@@ -82,6 +82,8 @@ class MainWindow : public QMainWindow
         static QString s_query;
         static QFont s_font;
 
+        const QList<QAction*>& getExtActions();
+
     public slots:
         void newDB();
         void loadNotes();
@@ -118,6 +120,8 @@ class MainWindow : public QMainWindow
         void usage();
         void about();
         void importDone(int action);
+        void extActions();
+        void extProcFinished(int exitCode, QProcess::ExitStatus exitStatus);
     private:
         QSystemTrayIcon *m_trayIcon;
         void createTrayIcon();
@@ -142,6 +146,9 @@ class MainWindow : public QMainWindow
         QStringList getTagsOf(int row);
         int getTagCount(const QString& tag);
         void refreshTag();
+
+        QList<QAction*> m_extActions;
+        QList<QProcess*> m_extProcs;
 };
 
 extern MainWindow* g_mainWindow;

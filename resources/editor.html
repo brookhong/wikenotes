@@ -9,16 +9,18 @@
 
     <script type="text/javascript" src="qrc:/jquery.min.js"></script>
     <script type="text/javascript" src="qrc:/jquery.cleditor.min.js"></script>
-    <script type="text/javascript" src="qrc:/jquery.cleditor.advancedtable.min.js"></script>
     
     <script type="text/javascript">
+      function iframeInit() {
+        $(editor.doc).keyup(function(e) { if(e.keyCode == 27) {window.focus();} });
+      }
       $(document).ready(function() {
         editor = $("#input").cleditor({width:"100%", height:"100%"})[0].focus();
         $(window).resize();
       });
       $(window).resize(function() {
         var $win = $(window);
-        $("#container").width($win.width() - 5).height($win.height() - 5).offset({left:0, top:0});
+        $("#container").width($win.width() - 4).height($win.height() - 5).offset({left:0, top:1});
         editor.refresh();
       });
     </script>

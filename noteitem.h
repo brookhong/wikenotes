@@ -24,13 +24,21 @@ private:
     QByteArray m_buffer;
     int m_position;
 };
-class LocalFileDialog : public QWidget {
+class LocalFileDialog : public QObject {
     Q_OBJECT
 public:
-    LocalFileDialog(QWidget * parent = 0) : QWidget(parent){
-    }
+    LocalFileDialog(QWidget * parent = 0) : QObject(parent){ }
 public slots:
     QString selectFiles(const QString& filters);
+};
+class TextBrowser : public QTextBrowser {
+    Q_OBJECT
+public:
+    TextBrowser(QWidget * parent = 0);
+    ~TextBrowser();
+protected:
+    virtual void contextMenuEvent(QContextMenuEvent * event);
+    QMenu* m_contextMenu;
 };
 class NoteItem : public QFrame
 {
@@ -48,6 +56,7 @@ class NoteItem : public QFrame
         bool saveNote();
         bool close();
         void toggleView();
+        QString selectedText();
 
     private:
         bool eventFilter(QObject *obj, QEvent *ev);
@@ -63,7 +72,7 @@ class NoteItem : public QFrame
         QVBoxLayout * m_verticalLayout;
         QLabel *m_title;
         QString m_content;
-        QTextBrowser* m_textBrowser;
+        TextBrowser* m_textBrowser;
 
         QLineEdit *m_titleEdit;
         QLineEdit *m_tagEdit;
