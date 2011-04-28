@@ -1,0 +1,11 @@
+Makefile*
+*.qm
+debug/
+help/
+object_script.wikenotes.*
+release/
+ui_*.h
+*.7z
+*.pro.user
+wikenotes/
+blog/

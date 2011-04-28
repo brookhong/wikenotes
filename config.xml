@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+    <language name="English"/>
+    <text_font name="Tahoma" size="10"/>
+    <hotkeys>
+        <toggle_main_window shortcut="Alt+Q"/>
+    </hotkeys>
+    <external_commands>
+        <external_command name="notepad with" command="notepad.exe &lt; &quot;%select%&quot;" shortcut="Alt+N"/>
+        <external_command name="gvim with" command="&quot;C:/Program Files/Vim/vim73/gvim.exe&quot; &lt; %select%" shortcut="Alt+V"/>
+        <external_command name="gvim" command="&quot;C:/Program Files/Vim/vim73/gvim.exe&quot; &quot;%select%&quot;" shortcut="Alt+V"/>
+        <external_command name="google search" command="http://www.google.com/#q=%select%" shortcut="Alt+G"/>
+        <external_command name="baidu search" command="http://www.baidu.com/s?wd=%select%" shortcut="Alt+B"/>
+    </external_commands>
+</config>
