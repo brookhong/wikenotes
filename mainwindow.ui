@@ -106,6 +106,7 @@
     <addaction name="actionNew_Library"/>
     <addaction name="action_Open_Notes_Library"/>
     <addaction name="separator"/>
+    <addaction name="action_New_Plain_Text_Note"/>
     <addaction name="action_New_Note"/>
     <addaction name="action_Edit_Selected_Note"/>
     <addaction name="action_Save_Note"/>
@@ -186,10 +187,10 @@
     </iconset>
    </property>
    <property name="text">
-    <string>&amp;New Note</string>
+    <string>New &amp;HTML Note</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+N</string>
+    <string>Ctrl+H</string>
    </property>
   </action>
   <action name="action_Edit_Selected_Note">
@@ -333,6 +334,14 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+F</string>
+   </property>
+  </action>
+  <action name="action_New_Plain_Text_Note">
+   <property name="text">
+    <string>&amp;New Plain Text Note</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+N</string>
    </property>
   </action>
  </widget>

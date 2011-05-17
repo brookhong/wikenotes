@@ -68,6 +68,7 @@ class MainWindow : public QMainWindow
         bool openDB(const QString& name);
         int lastInsertId();
         bool saveNote(int row, QString& title, QString& content, QStringList& tags, QString& datetime);
+        void setCurrentTag(const QString& tag);
 
         //0: success; 1: already exists; 2: other error
         int insertNote(QString& title, QString& content, QString& tag, QString& hashKey, QString& datetime);
@@ -81,6 +82,7 @@ class MainWindow : public QMainWindow
         void ensureVisible(NoteItem* item);
         static QString s_query;
         static QFont s_font;
+        static QCompleter s_tagCompleter;
 
         const QList<QAction*>& getExtActions();
 
@@ -101,7 +103,9 @@ class MainWindow : public QMainWindow
         void iconActivated(QSystemTrayIcon::ActivationReason reason);
         void toggleVisibility();
         void selectDB();
-        void newNote();
+        void newPlainNote();
+        void newHTMLNote();
+        void newNote(bool rich);
         void editActiveNote();
         void saveNote();
         bool delActiveNote();
@@ -112,6 +116,7 @@ class MainWindow : public QMainWindow
         void removeTag(const QString& tag);
         void instantSearch(const QString& query);
         void tagPressed(const QModelIndex &current);
+        void tagChanged(const QItemSelection &selected, const QItemSelection &deselected);
         void splitterMoved();
         void statusMessage(const QString& msg);
         void setNoteFont();

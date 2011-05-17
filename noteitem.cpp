@@ -194,6 +194,8 @@ void NoteItem::initControls()
         m_tagEdit->setFont(font);
         m_tagEdit->setText(tag);
         m_verticalLayout->addWidget(m_tagEdit);
+
+        m_tagEdit->setCompleter(&(MainWindow::s_tagCompleter));
     }
     loadResource();
 }
@@ -433,6 +435,9 @@ bool NoteItem::saveNote()
 
             g_mainWindow->insertNoteRes(imgName, m_noteId, (int)QTextDocument::ImageResource, buffer.data());
         }
+        //enable notelist update
+        m_readOnly = true;
+        g_mainWindow->setCurrentTag(tags[0]);
     }
     return ret;
 }

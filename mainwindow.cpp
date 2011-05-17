@@ -4,6 +4,7 @@
 
 QString MainWindow::s_query;
 QFont MainWindow::s_font(tr("Tahoma"), 10);
+QCompleter MainWindow::s_tagCompleter;
 const char* query_like[] = {
     "(content like '%KEYWORD%' or title like '%KEYWORD%' or tag like '%KEYWORD%')",
     "(content like '%KEYWORD%' or title like '%KEYWORD%')",
@@ -52,7 +53,8 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->actionE_Xit, SIGNAL(triggered()), qApp, SLOT(quit()));
     connect(ui->actionNew_Library, SIGNAL(triggered()), this, SLOT(newDB()));
     connect(ui->action_Open_Notes_Library, SIGNAL(triggered()), this, SLOT(selectDB()));
-    connect(ui->action_New_Note, SIGNAL(triggered()), this, SLOT(newNote()));
+    connect(ui->action_New_Plain_Text_Note, SIGNAL(triggered()), this, SLOT(newPlainNote()));
+    connect(ui->action_New_Note, SIGNAL(triggered()), this, SLOT(newHTMLNote()));
     connect(ui->action_Edit_Selected_Note, SIGNAL(triggered()), this, SLOT(editActiveNote()));
     connect(ui->action_Save_Note, SIGNAL(triggered()), this, SLOT(saveNote()));
     connect(ui->action_Delete_Selected_Note, SIGNAL(triggered()), this, SLOT(delActiveNote()));
@@ -74,8 +76,10 @@ MainWindow::MainWindow(QWidget *parent) :
 
     m_tagModel = new QStringListModel();
     ui->tagView->setModel(m_tagModel);
+    s_tagCompleter.setModel(m_tagModel);
     ui->tagView->setSelectionMode(QAbstractItemView::ExtendedSelection);
     connect(ui->tagView, SIGNAL(pressed(const QModelIndex&)), this, SLOT(tagPressed(const QModelIndex&)));
+    connect(ui->tagView->selectionModel(), SIGNAL(selectionChanged(const QItemSelection&, const QItemSelection&)), this, SLOT(tagChanged(const QItemSelection&, const QItemSelection&)));
     ui->tagView->setStyleSheet("#tagView {font-size: 12px;} QListView::item:hover{background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #FAFBFE, stop: 1 #DCDEF1);color:rgb(0,0,128);}");
 }
 void MainWindow::createTrayIcon()
@@ -359,10 +363,12 @@ void MainWindow::loadNotes()
     }
     if(!m_tagList.empty()) {
         if(m_criterion == "") 
-            m_criterion = QString(" where (%1)").arg(tag_like);
+            m_criterion = QString(" where (%1)").arg(tag_like).replace(QRegExp("KEYWORD"),m_tagList[0]);
         else
-            m_criterion += QString(" and (%1)").arg(tag_like);
-        m_criterion = m_criterion.replace(QRegExp("KEYWORD"),m_tagList.join(","));
+            m_criterion += QString(" and (%1)").arg(tag_like).replace(QRegExp("KEYWORD"),m_tagList[0]);
+        for(int i =1 ; i < m_tagList.size() ; i++) {
+            m_criterion += QString(" and (%1)").arg(tag_like).replace(QRegExp("KEYWORD"),m_tagList[i]);
+        }
     }
     QString sql = QString("select count(*) from notes %1").arg(m_criterion);
     int found = m_q->SqlAggregateFuncResult(sql.toUtf8());
@@ -385,13 +391,26 @@ void MainWindow::tagPressed(const QModelIndex &current)
         m_tagList << modelList[i].data().toString();
     }
     if(m_tagList.indexOf(tr("All")) != -1) {
-        m_tagList.clear();
         ui->tagView->selectionModel()->clearSelection();
         ui->tagView->setCurrentIndex(current);
-        if(current.row() != 0)
-            m_tagList << current.data().toString();
     }
-    m_tagList.sort();
+}
+void MainWindow::tagChanged(const QItemSelection &selected, const QItemSelection &deselected)
+{
+    NoteItem* activeItem = NoteItem::getActiveItem();
+    //Do NOT update notelist whenever editing a note
+    if(activeItem && !activeItem->isReadOnly()) 
+        return;
+
+    QModelIndexList modelList = ui->tagView->selectionModel()->selectedIndexes();
+    m_tagList.clear();
+    for(int i =0 ; i < modelList.size() ; i++) {
+        m_tagList << modelList[i].data().toString();
+    }
+    if(m_tagList.indexOf(tr("All")) != -1) 
+        m_tagList.clear();
+    else
+        m_tagList.sort();
     loadNotes();
 }
 void MainWindow::splitterMoved()
@@ -555,21 +574,14 @@ void MainWindow::addTag(const QString& tag)
     while(i < len && lst[i] < tag) {
         i++;
     }
-    if(m_tagModel->insertRows(i,1)) {
+    if(m_tagModel->insertRows(i,1)) 
         m_tagModel->setData(m_tagModel->index(i),tag);
-        //ui->tagView->setCurrentIndex(m_tagModel->index(m_tagModel->stringList().indexOf(tag)));
-    }
 }
 void MainWindow::removeTag(const QString& tag)
 {
     int i = m_tagModel->stringList().indexOf(tag);
-    if(i > 0 && m_tagModel->removeRows(i,1)) {
-        int n = m_tagModel->rowCount();
-        if(i < n)
-            ui->tagView->setCurrentIndex(m_tagModel->index(i));
-        else
-            ui->tagView->setCurrentIndex(m_tagModel->index(i-1));
-    }
+    if(i > 0) 
+        m_tagModel->removeRows(i,1);
 }
 void MainWindow::toggleNoteView()
 {
@@ -591,6 +603,10 @@ bool MainWindow::delActiveNote()
         sql = QString("delete from notes_res where noteid=%1").arg(row);
         m_q->SqlStatement(sql.toUtf8());
 
+        NoteItem* item = ui->noteList->getNextNote(activeItem);
+        NoteItem::setActiveItem(item);
+        ui->noteList->removeNote(activeItem);
+
         int i, oldTagSize = oldTags.size();
         for(i=0; i<oldTagSize; ++i) {
             if(getTagCount(oldTags[i]) == 0)
@@ -600,17 +616,20 @@ bool MainWindow::delActiveNote()
     }
     else
         ret = true;
-    if(ret) {
-        NoteItem* item = ui->noteList->getNextNote(activeItem);
-        NoteItem::setActiveItem(item);
-        ui->noteList->removeNote(activeItem);
-    }
     return ret;
 }
-void MainWindow::newNote()
+void MainWindow::newPlainNote()
+{
+    newNote(false);
+}
+void MainWindow::newHTMLNote()
+{
+    newNote(true);
+}
+void MainWindow::newNote(bool rich)
 {
     ui->noteList->clear();
-    NoteItem *noteItem = new NoteItem(ui->noteList,0,false);
+    NoteItem *noteItem = new NoteItem(ui->noteList,0,false,rich);
     ui->noteList->addNote(noteItem);
     noteItem->autoSize();
     NoteItem::setActiveItem(noteItem);
@@ -630,11 +649,13 @@ void MainWindow::editActiveNote()
     ui->action_Save_Note->setEnabled(true);
     resizeEvent(0);
 }
+void MainWindow::setCurrentTag(const QString& tag) {
+    ui->tagView->setCurrentIndex(m_tagModel->index(m_tagModel->stringList().indexOf(tag)));
+}
 void MainWindow::saveNote()
 {
     NoteItem* activeItem = NoteItem::getActiveItem();
-    if(activeItem->saveNote())
-        loadNotes();
+    activeItem->saveNote();
 }
 void MainWindow::statusMessage(const QString& msg)
 {
