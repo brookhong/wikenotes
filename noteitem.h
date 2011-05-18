@@ -55,7 +55,6 @@ class NoteItem : public QFrame
         bool isRich();
         bool saveNote();
         bool close();
-        void toggleView();
         QString selectedText();
 
     private:
@@ -72,7 +71,6 @@ class NoteItem : public QFrame
         QVBoxLayout * m_verticalLayout;
         QLabel *m_title;
         QString m_content;
-        TextBrowser* m_textBrowser;
 
         QLineEdit *m_titleEdit;
         QLineEdit *m_tagEdit;

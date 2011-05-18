@@ -4,6 +4,7 @@
 
 QString MainWindow::s_query;
 QFont MainWindow::s_font(tr("Tahoma"), 10);
+QFontMetrics MainWindow::s_fontMetrics(MainWindow::s_font);
 QCompleter MainWindow::s_tagCompleter;
 const char* query_like[] = {
     "(content like '%KEYWORD%' or title like '%KEYWORD%' or tag like '%KEYWORD%')",
@@ -58,7 +59,6 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->action_Edit_Selected_Note, SIGNAL(triggered()), this, SLOT(editActiveNote()));
     connect(ui->action_Save_Note, SIGNAL(triggered()), this, SLOT(saveNote()));
     connect(ui->action_Delete_Selected_Note, SIGNAL(triggered()), this, SLOT(delActiveNote()));
-    connect(ui->action_HTML_Preview, SIGNAL(triggered()), this, SLOT(toggleNoteView()));
     connect(ui->action_Import, SIGNAL(triggered()), this, SLOT(importNotes()));
     connect(ui->action_Export_Notes, SIGNAL(triggered()), this, SLOT(exportNotes()));
     connect(ui->actionText_Note_Font, SIGNAL(triggered()), this, SLOT(setNoteFont()));
@@ -114,6 +114,7 @@ void MainWindow::loadSettings()
                 if(xml.name() == "text_font") {
                     QXmlStreamAttributes attrs = xml.attributes();
                     s_font = QFont(attrs.value("name").toString(), attrs.value("size").toString().toInt());
+                    s_fontMetrics = QFontMetrics(s_font);
                 }
                 else if(xml.name() == "toggle_main_window") {
                     QXmlStreamAttributes attrs = xml.attributes();
@@ -298,7 +299,7 @@ bool MainWindow::openDB(const QString& dbName)
             try {
                 retry++;
                 m_q->SqlStatement("PRAGMA key = '"+QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha1).toHex()+"';");
-                m_q->Sql("select rowid from notes limit 1");
+                m_q->SqlStatement("select rowid from notes limit 1");
                 ret = true;
                 break;
             }
@@ -350,6 +351,7 @@ void MainWindow::loadImageFromDB(const QString& fileName, QByteArray& imgData)
     if(m_q->FetchRow()) {
         imgData = QByteArray((char*)m_q->GetColumnBlob(3), m_q->GetColumnBytes(3));
     }
+    m_q->FreeQuery();
 }
 void MainWindow::loadNotes()
 {
@@ -422,9 +424,10 @@ int MainWindow::insertNote(QString& title, QString& content, QString& tag, QStri
     int ret = 2;
     QString sql = "select rowid from notes where hash='"+hashKey+"'";
     m_q->Sql(sql.toUtf8());
-    if(m_q->FetchRow()) {
+    bool got = m_q->FetchRow();
+    m_q->FreeQuery();
+    if(got) 
         ret = 1;
-    }
     else {
         title.replace("'","''");
         content.replace("'","''");
@@ -467,7 +470,12 @@ bool MainWindow::saveNote(int row, QString& title, QString& content, QStringList
         if(row > 0) {
             QString sql = "select rowid from notes where hash='"+hashKey+"'";
             m_q->Sql(sql.toUtf8());
-            if(m_q->FetchRow() && m_q->GetColumnInt(0) != row) {
+            int conflictRow = row;
+            if(m_q->FetchRow()) 
+                conflictRow = m_q->GetColumnInt(0);
+            m_q->FreeQuery();
+
+            if(conflictRow != row) {
                 statusMessage(tr("There exists a note with the same content, thus I will NOT same this one."));
             }
             else {
@@ -554,6 +562,7 @@ QStringList MainWindow::getTagsOf(int row)
     if(m_q->FetchRow()) {
         tags = QString::fromUtf8((char*)m_q->GetColumnCString(0)).split(",");
     }
+    m_q->FreeQuery();
     return tags;
 }
 int MainWindow::getTagCount(const QString& tag)
@@ -565,6 +574,7 @@ int MainWindow::getTagCount(const QString& tag)
     if(m_q->FetchRow()) {
         ret = m_q->GetColumnInt(0);
     }
+    m_q->FreeQuery();
     return ret;
 }
 void MainWindow::addTag(const QString& tag)
@@ -582,12 +592,6 @@ void MainWindow::removeTag(const QString& tag)
     int i = m_tagModel->stringList().indexOf(tag);
     if(i > 0) 
         m_tagModel->removeRows(i,1);
-}
-void MainWindow::toggleNoteView()
-{
-    NoteItem* activeItem = NoteItem::getActiveItem();
-    if(activeItem->isReadOnly())
-        activeItem->toggleView();
 }
 bool MainWindow::delActiveNote()
 {
@@ -676,6 +680,7 @@ void MainWindow::refreshTag()
     while(m_q->FetchRow()) {
         tagList << QString::fromUtf8((char*)m_q->GetColumnCString(0)).split(",");
     }
+    m_q->FreeQuery();
     tagList.sort();
     tagList.removeDuplicates();
     tagList.prepend(tr("All"));
@@ -714,10 +719,14 @@ void ImportDialog::closeEvent(QCloseEvent *event)
 }
 void NotesImporter::run()
 {
-    int num = 0;
     QFile file(m_file);
     if(m_action == 0) {
         if (file.open(QIODevice::ReadOnly)) {
+            int success = 0, fail = 0;
+            QFile log(m_file+".log");
+            QString logString;
+            log.open(QIODevice::WriteOnly | QIODevice::Append);
+
             QXmlStreamReader xml(&file);
             QString title,datetime,link,tag,content,hashKey,res_name,res_type;
             int res_flag = 0;
@@ -727,6 +736,7 @@ void NotesImporter::run()
             int noteId = 1;
             if(q->FetchRow())
                 noteId = q->GetColumnInt(0)+1;
+            q->FreeQuery();
             while (!xml.atEnd()) {
                 if (xml.isStartElement()) {
                     if(xml.name() == "note") {
@@ -754,16 +764,20 @@ void NotesImporter::run()
                         hashKey = QCryptographicHash::hash(content.toUtf8(), QCryptographicHash::Sha1).toHex();
                         int ret = g_mainWindow->insertNote(title,content,tag,hashKey,datetime);
                         if(ret == 0) {
-                            num++;
+                            success++;
                             noteId++;
-                            emit importMsg(tr("%1 notes imported from %2.").arg(num).arg(m_file));
                         }
                         else if(ret == 1) {
-                            emit importMsg(tr("Note already exists in the notes library:\n\n%1").arg(title));
+                            fail++;
+                            logString = tr("Note already exists in the notes library: %1\n").arg(title); 
+                            log.write(logString.toLocal8Bit());
                         }
                         else {
-                            emit importMsg(tr("SQL Error."));
+                            fail++;
+                            logString = tr("SQL Error: %1\n").arg(title);
+                            log.write(logString.toLocal8Bit());
                         }
+                        emit importMsg(tr("Status of importing notes from %1:\n\nSuccess:\t%2\nFail:\t%3\nLog:\t%4.log").arg(m_file).arg(success).arg(fail).arg(m_file));
                     }
                     else if(xml.name() == "resource") {
                         res_flag = 0;
@@ -771,9 +785,10 @@ void NotesImporter::run()
                     }
                 }
                 xml.readNext();
-                msleep(10);
             }
             file.close();
+            logString = tr("\n\nSummary:\n\nSuccess:\t%2\nFail:\t%3").arg(m_file).arg(success).arg(fail);
+            log.write(logString.toLocal8Bit());
         }
     }
     else if(m_action == 1){
@@ -808,9 +823,11 @@ void NotesImporter::run()
                     writer.writeCDATA(res_data.toBase64());
                     writer.writeEndElement();
                 }
+                q->FreeQuery();
 
                 writer.writeEndElement();
             }
+            q->FreeQuery();
 
             writer.writeEndElement();
 
@@ -847,6 +864,7 @@ void MainWindow::setNoteFont()
 {
     bool ok;
     s_font = QFontDialog::getFont(&ok, s_font, this);
+    s_fontMetrics = QFontMetrics(s_font);
     if (ok) {
         m_bSettings = true;
         ui->noteList->setTextNoteFont(s_font);
@@ -912,8 +930,6 @@ void MainWindow::noteSelected(bool has, bool htmlView)
 {
     ui->action_Delete_Selected_Note->setEnabled(has);
     ui->action_Edit_Selected_Note->setEnabled(has);
-    ui->action_HTML_Preview->setEnabled(has);
-    ui->action_HTML_Preview->setChecked(htmlView);
 }
 void MainWindow::ensureVisible(NoteItem* item)
 {

@@ -82,6 +82,7 @@ class MainWindow : public QMainWindow
         void ensureVisible(NoteItem* item);
         static QString s_query;
         static QFont s_font;
+        static QFontMetrics s_fontMetrics;
         static QCompleter s_tagCompleter;
 
         const QList<QAction*>& getExtActions();
@@ -109,7 +110,6 @@ class MainWindow : public QMainWindow
         void editActiveNote();
         void saveNote();
         bool delActiveNote();
-        void toggleNoteView();
         void importNotes();
         void exportNotes();
         void addTag(const QString& tag);

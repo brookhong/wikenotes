@@ -167,11 +167,11 @@
     <bool>false</bool>
    </attribute>
    <addaction name="action_Open_Notes_Library"/>
+   <addaction name="action_New_Plain_Text_Note"/>
    <addaction name="action_New_Note"/>
    <addaction name="action_Edit_Selected_Note"/>
    <addaction name="action_Save_Note"/>
    <addaction name="action_Delete_Selected_Note"/>
-   <addaction name="action_HTML_Preview"/>
    <addaction name="actionUsage"/>
    <addaction name="action_About"/>
   </widget>
@@ -182,9 +182,9 @@
   </action>
   <action name="action_New_Note">
    <property name="icon">
-    <iconset>
-     <normalon>:/new.png</normalon>
-    </iconset>
+    <iconset resource="resources/wike.qrc">
+     <normaloff>:/new_text.png</normaloff>
+     <normalon>:/new.png</normalon>:/new_text.png</iconset>
    </property>
    <property name="text">
     <string>New &amp;HTML Note</string>
@@ -281,25 +281,6 @@
     <string>Usage</string>
    </property>
   </action>
-  <action name="action_HTML_Preview">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="enabled">
-    <bool>false</bool>
-   </property>
-   <property name="icon">
-    <iconset>
-     <normalon>:/html_view.png</normalon>
-    </iconset>
-   </property>
-   <property name="text">
-    <string>&amp;HTML Preview</string>
-   </property>
-   <property name="shortcut">
-    <string>Alt+S</string>
-   </property>
-  </action>
   <action name="action_Open_Notes_Library">
    <property name="icon">
     <iconset>
@@ -337,6 +318,10 @@
    </property>
   </action>
   <action name="action_New_Plain_Text_Note">
+   <property name="icon">
+    <iconset resource="resources/wike.qrc">
+     <normaloff>:/new.png</normaloff>:/new.png</iconset>
+   </property>
    <property name="text">
     <string>&amp;New Plain Text Note</string>
    </property>
@@ -352,6 +337,8 @@
    <header>notelist.h</header>
   </customwidget>
  </customwidgets>
- <resources/>
+ <resources>
+  <include location="resources/wike.qrc"/>
+ </resources>
  <connections/>
 </ui>
