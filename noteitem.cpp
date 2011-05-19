@@ -77,6 +77,26 @@ QString LocalFileDialog::selectFiles(const QString& filters) {
     }
     return "";
 }
+PlainTextBrowser::PlainTextBrowser(QWidget * parent) : QPlainTextEdit(parent)
+{
+    m_contextMenu = new QMenu(tr("External Commands"), this);
+    const QList<QAction*>& lst = g_mainWindow->getExtActions();
+    for (int i = 0; i < lst.size(); ++i) {
+        m_contextMenu->addAction(lst[i]);
+        addAction(lst[i]);
+    }
+}
+void PlainTextBrowser::contextMenuEvent(QContextMenuEvent * event)
+{
+    QMenu* menu = createStandardContextMenu();
+    menu->addMenu(m_contextMenu);
+    menu->exec(event->globalPos());
+    delete menu;
+}
+PlainTextBrowser::~PlainTextBrowser()
+{
+    delete m_contextMenu;
+}
 TextBrowser::TextBrowser(QWidget * parent) : QTextBrowser(parent)
 {
     m_contextMenu = new QMenu(tr("External Commands"), this);
@@ -151,7 +171,7 @@ void NoteItem::initControls()
             contentWidget = textBrowser;
         }
         else {
-            QPlainTextEdit* plainTextEdit = new QPlainTextEdit(this);
+            PlainTextBrowser* plainTextEdit = new PlainTextBrowser(this);
             plainTextEdit->setPlainText(m_content);
             plainTextEdit->setReadOnly(m_readOnly);
             plainTextEdit->setStyleSheet("#contentWidget { background:url(:/text.png)}");
@@ -261,7 +281,7 @@ QString NoteItem::selectedText()
         s = textBrowser->textCursor().selectedText().replace(QChar(0x2029), QChar('\n'));
     }
     else {
-        QPlainTextEdit* textBrowser = findChild<QPlainTextEdit *>("contentWidget");
+        PlainTextBrowser* textBrowser = findChild<PlainTextBrowser *>("contentWidget");
         s = textBrowser->textCursor().selectedText().replace(QChar(0x2029), QChar('\n'));
     }
     return s;
@@ -276,7 +296,7 @@ bool NoteItem::shortCut(int k)
                     textBrowser->find(MainWindow::s_query);
                 }
                 else {
-                    QPlainTextEdit* textBrowser = findChild<QPlainTextEdit *>("contentWidget");
+                    PlainTextBrowser* textBrowser = findChild<PlainTextBrowser *>("contentWidget");
                     textBrowser->find(MainWindow::s_query);
                 }
             }
@@ -316,7 +336,7 @@ bool NoteItem::eventFilter(QObject *obj, QEvent *ev)
 void NoteItem::setFont(const QFont& font)
 {
     if(!m_rich) {
-        QPlainTextEdit* textBrowser = findChild<QPlainTextEdit *>("contentWidget");
+        PlainTextBrowser* textBrowser = findChild<PlainTextBrowser *>("contentWidget");
         QTextCursor cursor = textBrowser->textCursor();
         textBrowser->selectAll();
         textBrowser->setFont(font);
@@ -336,7 +356,7 @@ void NoteItem::autoSize()
                 h = sz.height()+m_title->height()+30;
             }
             else {
-                QPlainTextEdit* textBrowser = findChild<QPlainTextEdit *>("contentWidget");
+                PlainTextBrowser* textBrowser = findChild<PlainTextBrowser *>("contentWidget");
                 QRect rc = MainWindow::s_fontMetrics.boundingRect(0, 0, textBrowser->width(), 600, Qt::TextExpandTabs | Qt::TextWordWrap | Qt::TextIncludeTrailingSpaces, m_content);
                 h = rc.height()+m_title->height()+30;
             }
@@ -488,7 +508,7 @@ void NoteItem::active()
         textBrowser->setFocus();
     }
     else {
-        QPlainTextEdit* textBrowser = findChild<QPlainTextEdit *>("contentWidget");
+        PlainTextBrowser* textBrowser = findChild<PlainTextBrowser *>("contentWidget");
         if(MainWindow::s_query.length())
             QueryHighlighter::instance().setDocument(textBrowser->document());
         textBrowser->setFocus();

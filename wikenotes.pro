@@ -47,7 +47,7 @@ RESOURCES += resources/wike.qrc
 win32 {
     SOURCES += qxt/qxtglobalshortcut_win.cpp
     RC_FILE = resources/wike.rc
-    LIBS += D:/works/openssl-0.9.8k_WIN32/lib/libeay32.lib
+    LIBS += D:/works/openssl-0.9.8k_WIN32/lib/libeay32.lib -luser32
 }
 
 TRANSLATIONS = chinese.ts

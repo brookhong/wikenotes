@@ -31,6 +31,15 @@ public:
 public slots:
     QString selectFiles(const QString& filters);
 };
+class PlainTextBrowser : public QPlainTextEdit {
+    Q_OBJECT
+public:
+    PlainTextBrowser(QWidget * parent = 0);
+    ~PlainTextBrowser();
+protected:
+    virtual void contextMenuEvent(QContextMenuEvent * event);
+    QMenu* m_contextMenu;
+};
 class TextBrowser : public QTextBrowser {
     Q_OBJECT
 public:

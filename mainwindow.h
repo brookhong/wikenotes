@@ -103,6 +103,7 @@ class MainWindow : public QMainWindow
         void handleSingleMessage(const QString&msg);
         void iconActivated(QSystemTrayIcon::ActivationReason reason);
         void toggleVisibility();
+        void silentNewTextNote();
         void selectDB();
         void newPlainNote();
         void newHTMLNote();
@@ -135,6 +136,7 @@ class MainWindow : public QMainWindow
         QString m_dbName;
         bool m_bSettings;
         QxtGlobalShortcut* m_hkToggleMain;
+        QxtGlobalShortcut* m_hkNewTextNote;
         ImportDialog *m_importDialog;
         Ui::MainWindow *ui;
         QTranslator m_translator;

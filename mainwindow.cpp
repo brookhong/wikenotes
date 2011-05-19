@@ -1,6 +1,9 @@
 #include "mainwindow.h"
 #include "hotkeysettings.h"
 #include "ui_mainwindow.h"
+#ifdef WIN32
+#include <windows.h>
+#endif
 
 QString MainWindow::s_query;
 QFont MainWindow::s_font(tr("Tahoma"), 10);
@@ -27,6 +30,11 @@ MainWindow::MainWindow(QWidget *parent) :
     m_hkToggleMain = new QxtGlobalShortcut(this);
     connect(m_hkToggleMain, SIGNAL(activated()), this, SLOT(toggleVisibility()));
     m_hkToggleMain->setShortcut(QKeySequence("Alt+Q"));
+
+    m_hkNewTextNote = new QxtGlobalShortcut(this);
+    connect(m_hkNewTextNote, SIGNAL(activated()), this, SLOT(silentNewTextNote()));
+    m_hkNewTextNote->setShortcut(QKeySequence("Ctrl+1"));
+
     loadSettings();
     m_bSettings = false;
     if(m_dbName.isEmpty())
@@ -120,6 +128,10 @@ void MainWindow::loadSettings()
                     QXmlStreamAttributes attrs = xml.attributes();
                     m_hkToggleMain->setShortcut(QKeySequence(attrs.value("shortcut").toString()));
                 }
+                else if(xml.name() == "new_text_note") {
+                    QXmlStreamAttributes attrs = xml.attributes();
+                    m_hkNewTextNote->setShortcut(QKeySequence(attrs.value("shortcut").toString()));
+                }
                 else if(xml.name() == "default_notes_library") {
                     QXmlStreamAttributes attrs = xml.attributes();
                     m_dbName = attrs.value("name").toString();
@@ -172,6 +184,9 @@ void MainWindow::flushSettings()
                 writer.writeStartElement("toggle_main_window");
                 writer.writeAttribute("shortcut", m_hkToggleMain->shortcut().toString());
                 writer.writeEndElement();
+                writer.writeStartElement("new_text_note");
+                writer.writeAttribute("shortcut", m_hkNewTextNote->shortcut().toString());
+                writer.writeEndElement();
             writer.writeEndElement();
 
             writer.writeStartElement("external_commands");
@@ -201,6 +216,34 @@ void MainWindow::toggleVisibility()
     else {
         show();
         setWindowState((windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
+    }
+}
+void MainWindow::silentNewTextNote()
+{
+#ifdef WIN32
+    ::Sleep(300);
+    keybd_event(VK_CONTROL,MapVirtualKey (VK_CONTROL, 0),0,0);
+    keybd_event('C', MapVirtualKey ('C', 0), 0, 0);
+    keybd_event('C', MapVirtualKey ('C', 0), KEYEVENTF_KEYUP, 0);
+    keybd_event(VK_CONTROL,MapVirtualKey (VK_CONTROL, 0),KEYEVENTF_KEYUP,0);
+    ::Sleep(300);
+#endif
+
+    QClipboard *clipboard = QApplication::clipboard();
+    QString content = clipboard->text();
+    QString title;
+    if(content.length() > 30)
+        title = content.mid(0,28)+"...";
+    else
+        title = content;
+    QStringList tags;
+    tags << tr("Untagged");
+    QDateTime dt = QDateTime::currentDateTime();
+    QString date = dt.toString("yyyy-MM-dd hh:mm:ss");
+
+    if(saveNote(0, title, content, tags, date)) {
+        setCurrentTag(tags[0]);
+        loadNotes();
     }
 }
 void MainWindow::handleSingleMessage(const QString&msg)
@@ -872,15 +915,20 @@ void MainWindow::setNoteFont()
 }
 void MainWindow::setHotKey()
 {
-    QKeySequence ks = m_hkToggleMain->shortcut();
-    HotkeySettings diag(ks, this);
+    QKeySequence tm = m_hkToggleMain->shortcut();
+    QKeySequence ntn = m_hkNewTextNote->shortcut();
+    HotkeySettings diag(tm, ntn, this);
     m_hkToggleMain->setShortcut(QKeySequence());
+    m_hkNewTextNote->setShortcut(QKeySequence());
     if(diag.exec() == QDialog::Accepted) {
         m_bSettings = true;
         m_hkToggleMain->setShortcut(diag.m_hkTM);
+        m_hkNewTextNote->setShortcut(diag.m_hkNTN);
     }
-    else
-        m_hkToggleMain->setShortcut(ks);
+    else {
+        m_hkToggleMain->setShortcut(tm);
+        m_hkNewTextNote->setShortcut(ntn);
+    }
 }
 void MainWindow::changeLanguage()
 {
