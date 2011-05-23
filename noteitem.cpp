@@ -446,51 +446,53 @@ bool NoteItem::saveNote()
     tags.sort();
     ret = g_mainWindow->saveNote(m_noteId, title, m_content, tags, date);
     if(ret) {
-        QStringList res_to_remove;
-        QStringList res_to_add;
-        QStringList::Iterator it;
-        QRegExp rx("<img[^>]*src=\"wike://([0-9a-f]+)\"[^>]*>");
-        int pos = 0;
-        QString imgName, sql;
-        while ((pos = rx.indexIn(m_content, pos)) != -1) {
-            imgName = rx.cap(1);
-            if(!res_to_add.contains(imgName)) 
-                res_to_add << imgName;
+        if(m_rich) {
+            QStringList res_to_remove;
+            QStringList res_to_add;
+            QStringList::Iterator it;
+            QRegExp rx("<img[^>]*src=\"wike://([0-9a-f]+)\"[^>]*>");
+            int pos = 0;
+            QString imgName, sql;
+            while ((pos = rx.indexIn(m_content, pos)) != -1) {
+                imgName = rx.cap(1);
+                if(!res_to_add.contains(imgName)) 
+                    res_to_add << imgName;
 
-            pos += rx.matchedLength();
-        }
-        if(m_noteId == 0)
-            m_noteId = g_mainWindow->lastInsertId();
-        else {
-            sql = QString("select res_name from notes_res where noteid=%1").arg(m_noteId);
-            m_q->Sql(sql.toUtf8());
-            while(m_q->FetchRow()) {
-                res_to_remove << QString::fromUtf8((char*)m_q->GetColumnCString(0));
+                pos += rx.matchedLength();
             }
-            it = res_to_remove.begin();
-            while(it != res_to_remove.end()) {
-                if(res_to_add.contains(*it)) {
-                    res_to_add.removeOne(*it);
-                    it = res_to_remove.erase(it);
+            if(m_noteId == 0)
+                m_noteId = g_mainWindow->lastInsertId();
+            else {
+                sql = QString("select res_name from notes_res where noteid=%1").arg(m_noteId);
+                m_q->Sql(sql.toUtf8());
+                while(m_q->FetchRow()) {
+                    res_to_remove << QString::fromUtf8((char*)m_q->GetColumnCString(0));
                 }
-                else
-                    it++;
+                it = res_to_remove.begin();
+                while(it != res_to_remove.end()) {
+                    if(res_to_add.contains(*it)) {
+                        res_to_add.removeOne(*it);
+                        it = res_to_remove.erase(it);
+                    }
+                    else
+                        it++;
+                }
             }
-        }
-        for(it = res_to_remove.begin(); it != res_to_remove.end(); it++) {
-            sql = QString("delete from notes_res where noteid=%1 and res_name='%2'").arg(m_noteId).arg(*it);
-            m_q->SqlStatement(sql.toUtf8());
-        }
+            for(it = res_to_remove.begin(); it != res_to_remove.end(); it++) {
+                sql = QString("delete from notes_res where noteid=%1 and res_name='%2'").arg(m_noteId).arg(*it);
+                m_q->SqlStatement(sql.toUtf8());
+            }
 
-        for(it = res_to_add.begin(); it != res_to_add.end(); it++) {
-            imgName = *it;
-            QImage image = m_images[imgName];
+            for(it = res_to_add.begin(); it != res_to_add.end(); it++) {
+                imgName = *it;
+                QImage image = m_images[imgName];
 
-            QBuffer buffer;
-            QImageWriter writer(&buffer, "PNG");
-            writer.write(image);
+                QBuffer buffer;
+                QImageWriter writer(&buffer, "PNG");
+                writer.write(image);
 
-            g_mainWindow->insertNoteRes(imgName, m_noteId, (int)QTextDocument::ImageResource, buffer.data());
+                g_mainWindow->insertNoteRes(imgName, m_noteId, (int)QTextDocument::ImageResource, buffer.data());
+            }
         }
         //enable notelist update
         m_readOnly = true;

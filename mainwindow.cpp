@@ -39,11 +39,26 @@ MainWindow::MainWindow(QWidget *parent) :
     m_bSettings = false;
     if(m_dbName.isEmpty())
         m_dbName = QCoreApplication::applicationDirPath()+QDir::separator()+"default.wike";
-    if(m_lang.isEmpty())
-        m_lang = "English";
-    else if(m_translator.load(m_lang+".qm", ".")){
+    if(m_lang.isEmpty()) 
+        m_lang = QLocale::system().name();
+
+    if(m_translator.load(m_lang+".qm", ".")){
         qApp->installTranslator(&m_translator);
         ui->retranslateUi(this);
+    }
+
+    QAction *action_English = new QAction(this);
+    action_English->setText("en_US");
+    ui->menu_Language->addAction(action_English);
+    connect(action_English, SIGNAL(triggered()), this, SLOT(changeLanguage()));
+
+    QDir dir = QDir(QCoreApplication::applicationDirPath());
+    QStringList files = dir.entryList(QStringList("*.qm"), QDir::Files);
+    foreach (QString str,files) {
+        action_English = new QAction(this);
+        action_English->setText(str.replace(".qm",""));
+        ui->menu_Language->addAction(action_English);
+        connect(action_English, SIGNAL(triggered()), this, SLOT(changeLanguage()));
     }
 
     m_importDialog = new ImportDialog(this);
@@ -71,8 +86,6 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->action_Export_Notes, SIGNAL(triggered()), this, SLOT(exportNotes()));
     connect(ui->actionText_Note_Font, SIGNAL(triggered()), this, SLOT(setNoteFont()));
     connect(ui->action_Hotkey_Settings, SIGNAL(triggered()), this, SLOT(setHotKey()));
-    connect(ui->action_English, SIGNAL(triggered()), this, SLOT(changeLanguage()));
-    connect(ui->action_Chinese, SIGNAL(triggered()), this, SLOT(changeLanguage()));
     connect(ui->actionUsage, SIGNAL(triggered()), this, SLOT(usage()));
     connect(ui->action_About, SIGNAL(triggered()), this, SLOT(about()));
 
@@ -134,7 +147,14 @@ void MainWindow::loadSettings()
                 }
                 else if(xml.name() == "default_notes_library") {
                     QXmlStreamAttributes attrs = xml.attributes();
-                    m_dbName = attrs.value("name").toString();
+                    QString dbName = attrs.value("name").toString();
+                    QDir dir(dbName.mid(0, dbName.lastIndexOf(QDir::separator())));
+                    if(!dir.exists()) {
+                        m_bSettings = true;
+                        QMessageBox::warning(this, "WikeNotes", tr("Directory %1 not exists, default notes library will be used.").arg(dir.path())); 
+                    }
+                    else
+                        m_dbName = dbName;
                 }
                 else if(xml.name() == "language") {
                     QXmlStreamAttributes attrs = xml.attributes();
@@ -243,7 +263,6 @@ void MainWindow::silentNewTextNote()
 
     if(saveNote(0, title, content, tags, date)) {
         setCurrentTag(tags[0]);
-        loadNotes();
     }
 }
 void MainWindow::handleSingleMessage(const QString&msg)
@@ -380,10 +399,8 @@ SQLiteStatement* MainWindow::getFoundNote(int idx)
     QString sql;
     if(idx == -1)
         sql = QString("select rowid,title,content,tag,created from notes left join notes_attr on notes.rowid=notes_attr.rowid %1 order by created asc").arg(m_criterion);
-    else
-        sql = QString("select rowid,title,content,tag,created from notes left join notes_attr on notes.rowid=notes_attr.rowid %1 order by created desc limit 1 offset %2")
-            .arg(m_criterion)
-            .arg(idx);
+    else 
+        sql = "select rowid,title,content,tag,created from notes left join notes_attr on notes.rowid=notes_attr.rowid "+m_criterion+QString(" order by created desc limit 1 offset %1").arg(idx);
 
     m_q->Sql(sql.toUtf8());
     return m_q;
@@ -623,7 +640,7 @@ int MainWindow::getTagCount(const QString& tag)
 void MainWindow::addTag(const QString& tag)
 {
     QStringList lst = m_tagModel->stringList();
-    int i = 0, len = lst.count();
+    int i = 1, len = lst.count();
     while(i < len && lst[i] < tag) {
         i++;
     }
@@ -697,7 +714,10 @@ void MainWindow::editActiveNote()
     resizeEvent(0);
 }
 void MainWindow::setCurrentTag(const QString& tag) {
-    ui->tagView->setCurrentIndex(m_tagModel->index(m_tagModel->stringList().indexOf(tag)));
+    if(m_tagList.size() == 1 && m_tagList[0] == tag)
+        loadNotes();
+    else
+        ui->tagView->setCurrentIndex(m_tagModel->index(m_tagModel->stringList().indexOf(tag)));
 }
 void MainWindow::saveNote()
 {
@@ -830,7 +850,7 @@ void NotesImporter::run()
                 xml.readNext();
             }
             file.close();
-            logString = tr("\n\nSummary:\n\nSuccess:\t%2\nFail:\t%3").arg(m_file).arg(success).arg(fail);
+            logString = tr("\nSummary of importing notes from %1:\nSuccess:\t%2\nFail:\t%3\n").arg(m_file).arg(success).arg(fail);
             log.write(logString.toLocal8Bit());
         }
     }
@@ -866,7 +886,7 @@ void NotesImporter::run()
                     writer.writeCDATA(res_data.toBase64());
                     writer.writeEndElement();
                 }
-                q->FreeQuery();
+                q_res.FreeQuery();
 
                 writer.writeEndElement();
             }
@@ -935,11 +955,11 @@ void MainWindow::changeLanguage()
     QAction *act = qobject_cast<QAction*>(sender());
     QString lang = act->toolTip();
 
-    if(lang == "English") {
+    if(lang == "en_US") {
         qApp->removeTranslator(&m_translator);
     }
-    else if(lang == "Chinese") {
-        m_translator.load("chinese.qm", ".");
+    else {
+        m_translator.load(lang+".qm", ".");
         qApp->installTranslator(&m_translator);
     }
     if(m_lang != lang) {

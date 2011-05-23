@@ -6,7 +6,7 @@
 
 QT       += core gui webkit network
 
-VERSION = 0.3
+VERSION = 0.4
 # Define the preprocessor macro to get the application version in our application.
 DEFINES += APP_VERSION=\\\"$$VERSION\\\"
 
@@ -50,4 +50,4 @@ win32 {
     LIBS += D:/works/openssl-0.9.8k_WIN32/lib/libeay32.lib -luser32
 }
 
-TRANSLATIONS = chinese.ts
+TRANSLATIONS = zh_CN.ts

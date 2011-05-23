@@ -125,8 +125,6 @@
      <property name="title">
       <string>&amp;Language</string>
      </property>
-     <addaction name="action_English"/>
-     <addaction name="action_Chinese"/>
     </widget>
     <addaction name="actionText_Note_Font"/>
     <addaction name="action_Hotkey_Settings"/>
@@ -297,16 +295,6 @@
   <action name="actionNew_Library">
    <property name="text">
     <string>New &amp;Library</string>
-   </property>
-  </action>
-  <action name="action_English">
-   <property name="text">
-    <string>&amp;English</string>
-   </property>
-  </action>
-  <action name="action_Chinese">
-   <property name="text">
-    <string>&amp;Chinese</string>
    </property>
   </action>
   <action name="actionFocusSearchBox">
