@@ -57,6 +57,12 @@ class NotesImporter : public QThread
         int m_action; //0: import; 1: export
         QString m_file;
 };
+class TagCompleter : public QCompleter
+{
+    protected:
+        QStringList splitPath(const QString &path) const;
+        QString pathFromIndex(const QModelIndex &index) const;
+};
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -72,6 +78,7 @@ class MainWindow : public QMainWindow
 
         //0: success; 1: already exists; 2: other error
         int insertNote(QString& title, QString& content, QString& tag, QString& hashKey, QString& datetime);
+        static QString getTitleFromContent(const QString& content);
 
         bool insertNoteRes(QString& res_name, int noteId, int res_type, const QByteArray& res_data);
         SQLiteStatement* getFoundNote(int idx);
@@ -83,13 +90,14 @@ class MainWindow : public QMainWindow
         static QString s_query;
         static QFont s_font;
         static QFontMetrics s_fontMetrics;
-        static QCompleter s_tagCompleter;
+        static TagCompleter s_tagCompleter;
 
         const QList<QAction*>& getExtActions();
 
     public slots:
         void newDB();
         void loadNotes();
+        void editActiveNote();
 
     signals:
         void tagAdded(const QString&);
@@ -108,7 +116,6 @@ class MainWindow : public QMainWindow
         void newPlainNote();
         void newHTMLNote();
         void newNote(bool rich);
-        void editActiveNote();
         void saveNote();
         bool delActiveNote();
         void importNotes();

@@ -196,10 +196,10 @@ void NoteItem::initControls()
         m_titleEdit->setObjectName(QString::fromUtf8("titleEdit"));
         m_titleEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         m_titleEdit->setFont(font);
-        m_titleEdit->setText(title);
         m_verticalLayout->addWidget(m_titleEdit);
 
         if(m_rich) {
+            m_titleEdit->setText(title);
             m_webView = new QWebView(this);
             m_webView->page()->setNetworkAccessManager(new UrlBasedRenderer);
             QFile file(":/editor.html");
@@ -211,6 +211,8 @@ void NoteItem::initControls()
             m_verticalLayout->addWidget(m_webView);
         }
         else {
+            m_titleEdit->setText("");
+            m_titleEdit->setToolTip(QApplication::translate("MainWindow", "Leave this blank to choose title automatically.", 0, QApplication::UnicodeUTF8));
             m_textEdit = new QPlainTextEdit(this);
             m_textEdit->setFont(MainWindow::s_font);
             m_textEdit->setPlainText(m_content);
@@ -313,6 +315,10 @@ bool NoteItem::eventFilter(QObject *obj, QEvent *ev)
     QEvent::Type type = ev->type();
     QObject* textBrowser = findChild<QObject *>("contentWidget");
     switch(type) {
+        case QEvent::MouseButtonDblClick:
+            setActiveItem(this);
+            g_mainWindow->editActiveNote();
+            return true;
         case QEvent::MouseButtonPress:
         case QEvent::FocusIn:
             if(s_activeNote != this){
@@ -436,8 +442,11 @@ bool NoteItem::saveNote()
         m_content = m_content.replace(QRegExp("<!--StartFragment-->"),"");
         m_content = m_content.replace(QRegExp("<!--EndFragment-->"),"");
     }
-    else
+    else {
         m_content = m_textEdit->toPlainText();
+        if(title == "")
+            title = MainWindow::getTitleFromContent(m_content);
+    }
     QString tag = m_tagEdit->text();
     tag = tag.replace(QRegExp("^\\s+"),"");
     tag = tag.replace(QRegExp("\\s+$"),"");

@@ -8,7 +8,7 @@
 QString MainWindow::s_query;
 QFont MainWindow::s_font(tr("Tahoma"), 10);
 QFontMetrics MainWindow::s_fontMetrics(MainWindow::s_font);
-QCompleter MainWindow::s_tagCompleter;
+TagCompleter MainWindow::s_tagCompleter;
 const char* query_like[] = {
     "(content like '%KEYWORD%' or title like '%KEYWORD%' or tag like '%KEYWORD%')",
     "(content like '%KEYWORD%' or title like '%KEYWORD%')",
@@ -16,8 +16,32 @@ const char* query_like[] = {
     "(title like '%KEYWORD%')",
     "(tag like '%KEYWORD%')",
 };
+const char* sort_by[] = {
+    "created",
+    "title",
+    "length(content)",
+};
 const char* tag_like = "tag like 'KEYWORD' or tag like 'KEYWORD,%' or tag like '%,KEYWORD,%' or tag like '%,KEYWORD'";
 
+
+QStringList TagCompleter::splitPath(const QString &path) const
+{
+    QStringList lst = path.split(",");
+    QString last = lst[lst.size()-1];
+    return QStringList(last);
+}
+QString TagCompleter::pathFromIndex(const QModelIndex &index) const
+{
+    QString path = QCompleter::pathFromIndex(index);
+    QLineEdit *le = qobject_cast<QLineEdit*>(widget());
+    QStringList lst = le->text().split(',');
+    int len = lst.size();
+    if(len > 1) {
+        lst[len-1] = path;
+        path = lst.join(",");
+    }
+    return path;
+}
 //QFile g_log;
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -70,6 +94,8 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->searchBox->setStyleSheet("#searchBox {padding: 0 18px;background:url(:/search.png) no-repeat}");
     connect(ui->searchBox, SIGNAL(textChanged(const QString&)), this, SLOT(instantSearch(const QString&)));
     connect(ui->comboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(loadNotes()));
+    connect(ui->comboBoxSort, SIGNAL(currentIndexChanged(int)), this, SLOT(loadNotes()));
+    connect(ui->checkBox, SIGNAL(stateChanged(int)), this, SLOT(loadNotes()));
     connect(ui->vsplitter, SIGNAL(splitterMoved(int,int)), this, SLOT(splitterMoved()));
 
     addAction(ui->actionFocusSearchBox);
@@ -251,11 +277,7 @@ void MainWindow::silentNewTextNote()
 
     QClipboard *clipboard = QApplication::clipboard();
     QString content = clipboard->text();
-    QString title;
-    if(content.length() > 30)
-        title = content.mid(0,28)+"...";
-    else
-        title = content;
+    QString title = getTitleFromContent(content);
     QStringList tags;
     tags << tr("Untagged");
     QDateTime dt = QDateTime::currentDateTime();
@@ -399,8 +421,14 @@ SQLiteStatement* MainWindow::getFoundNote(int idx)
     QString sql;
     if(idx == -1)
         sql = QString("select rowid,title,content,tag,created from notes left join notes_attr on notes.rowid=notes_attr.rowid %1 order by created asc").arg(m_criterion);
-    else 
-        sql = "select rowid,title,content,tag,created from notes left join notes_attr on notes.rowid=notes_attr.rowid "+m_criterion+QString(" order by created desc limit 1 offset %1").arg(idx);
+    else {
+        sql = "select rowid,title,content,tag,created from notes left join notes_attr on notes.rowid=notes_attr.rowid "
+            + m_criterion
+            + " order by "
+            + sort_by[ui->comboBoxSort->currentIndex()]
+            + ((ui->checkBox->checkState() == Qt::Checked)?" asc":" desc")
+            + QString(" limit 1 offset %1").arg(idx);
+    }
 
     m_q->Sql(sql.toUtf8());
     return m_q;
@@ -503,6 +531,15 @@ int MainWindow::insertNote(QString& title, QString& content, QString& tag, QStri
     }
     return ret;
 }
+QString MainWindow::getTitleFromContent(const QString& content)
+{
+    QString title;
+    if(content.length() > 30)
+        title = content.mid(0,28)+"...";
+    else
+        title = content;
+    return title;
+}
 bool MainWindow::insertNoteRes(QString& res_name, int noteId, int res_type, const QByteArray& res_data)
 {
     m_q->Sql("INSERT INTO notes_res(res_name,noteid,res_type,res_data) values (?, ?, ?, ?)");
@@ -521,7 +558,7 @@ bool MainWindow::saveNote(int row, QString& title, QString& content, QStringList
 {
     bool ret = false;
     QString hashKey = QCryptographicHash::hash(content.toUtf8(), QCryptographicHash::Sha1).toHex();
-    if(title != "" && !tags.empty()) {
+    if(!tags.empty()) {
         int i, tagSize = tags.size();
         int *newTagCount = new int[tagSize];
         for(i=0; i<tagSize; ++i) {
