@@ -159,9 +159,17 @@
       <string>&amp;Language</string>
      </property>
     </widget>
+    <widget class="QMenu" name="menuLeft_Panel">
+     <property name="title">
+      <string>Left &amp;Panel</string>
+     </property>
+     <addaction name="action_Tag_List"/>
+     <addaction name="actionMonthly_List"/>
+    </widget>
     <addaction name="actionText_Note_Font"/>
     <addaction name="action_Hotkey_Settings"/>
     <addaction name="menu_Language"/>
+    <addaction name="menuLeft_Panel"/>
    </widget>
    <widget class="QMenu" name="menu_Help">
     <property name="title">
@@ -348,6 +356,16 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+N</string>
+   </property>
+  </action>
+  <action name="action_Tag_List">
+   <property name="text">
+    <string>&amp;Tag List</string>
+   </property>
+  </action>
+  <action name="actionMonthly_List">
+   <property name="text">
+    <string>Monthly List</string>
    </property>
   </action>
  </widget>

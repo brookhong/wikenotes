@@ -74,7 +74,7 @@ class MainWindow : public QMainWindow
         bool openDB(const QString& name);
         int lastInsertId();
         bool saveNote(int row, QString& title, QString& content, QStringList& tags, QString& datetime);
-        void setCurrentTag(const QString& tag);
+        void setCurrentCat(const QString& cat);
 
         //0: success; 1: already exists; 2: other error
         int insertNote(QString& title, QString& content, QString& tag, QString& hashKey, QString& datetime);
@@ -99,10 +99,6 @@ class MainWindow : public QMainWindow
         void loadNotes();
         void editActiveNote();
 
-    signals:
-        void tagAdded(const QString&);
-        void tagRemoved(const QString&);
-
     protected:
         void resizeEvent(QResizeEvent * event);
         bool event(QEvent *event);
@@ -120,8 +116,6 @@ class MainWindow : public QMainWindow
         bool delActiveNote();
         void importNotes();
         void exportNotes();
-        void addTag(const QString& tag);
-        void removeTag(const QString& tag);
         void instantSearch(const QString& query);
         void tagPressed(const QModelIndex &current);
         void tagChanged(const QItemSelection &selected, const QItemSelection &deselected);
@@ -130,6 +124,7 @@ class MainWindow : public QMainWindow
         void setNoteFont();
         void setHotKey();
         void changeLanguage();
+        void changeLeftPanel();
         void usage();
         void about();
         void importDone(int action);
@@ -148,18 +143,23 @@ class MainWindow : public QMainWindow
         Ui::MainWindow *ui;
         QTranslator m_translator;
         QString m_lang;
+        //true: tag list; false: monthly list
+        bool m_leftPanel;
 
         QStringListModel *m_tagModel;
+        QStringListModel *m_monthModel;
         SQLiteDatabase* m_db;
         SQLiteStatement* m_q;
         void closeDB();
 
-        QStringList m_tagList;
+        QStringList m_catList;
         QString m_criterion;
         NotesImporter m_importer;
         QStringList getTagsOf(int row);
         int getTagCount(const QString& tag);
-        void refreshTag();
+        void addTag(const QString& tag);
+        void removeTag(const QString& tag);
+        void refreshCat();
 
         QList<QAction*> m_extActions;
         QList<QProcess*> m_extProcs;

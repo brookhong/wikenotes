@@ -59,6 +59,10 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(m_hkNewTextNote, SIGNAL(activated()), this, SLOT(silentNewTextNote()));
     m_hkNewTextNote->setShortcut(QKeySequence("Ctrl+1"));
 
+    m_leftPanel = true;
+    connect(ui->action_Tag_List, SIGNAL(triggered()), this, SLOT(changeLeftPanel()));
+    connect(ui->actionMonthly_List, SIGNAL(triggered()), this, SLOT(changeLeftPanel()));
+
     loadSettings();
     m_bSettings = false;
     if(m_dbName.isEmpty())
@@ -90,6 +94,10 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->vsplitter->setHandleWidth(1);
     ui->vsplitter->setStretchFactor(0, 0);
     ui->vsplitter->setStretchFactor(1, 1);
+    QList<int> rightSizes;
+    rightSizes<<160<<480;
+    ui->vsplitter->setSizes(rightSizes);
+
 
     ui->searchBox->setStyleSheet("#searchBox {padding: 0 18px;background:url(:/search.png) no-repeat}");
     connect(ui->searchBox, SIGNAL(textChanged(const QString&)), this, SLOT(instantSearch(const QString&)));
@@ -115,11 +123,10 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->actionUsage, SIGNAL(triggered()), this, SLOT(usage()));
     connect(ui->action_About, SIGNAL(triggered()), this, SLOT(about()));
 
-    connect(this, SIGNAL(tagAdded(const QString&)), this, SLOT(addTag(const QString&)));
-    connect(this, SIGNAL(tagRemoved(const QString&)), this, SLOT(removeTag(const QString&)));
-
     connect(&m_importer, SIGNAL(importMsg(const QString&)), m_importDialog, SLOT(importMsg(const QString&)));
     connect(&m_importer, SIGNAL(importDone(int)), this, SLOT(importDone(int)));
+
+    m_monthModel = new QStringListModel();
 
     m_tagModel = new QStringListModel();
     ui->tagView->setModel(m_tagModel);
@@ -284,7 +291,7 @@ void MainWindow::silentNewTextNote()
     QString date = dt.toString("yyyy-MM-dd hh:mm:ss");
 
     if(saveNote(0, title, content, tags, date)) {
-        setCurrentTag(tags[0]);
+        setCurrentCat(tags[0]);
     }
 }
 void MainWindow::handleSingleMessage(const QString&msg)
@@ -396,7 +403,7 @@ bool MainWindow::openDB(const QString& dbName)
     }
     if(ret) {
         setWindowTitle(QString("WikeNotes (%1)").arg(dbName));
-        refreshTag();
+        refreshCat();
         loadNotes();
         m_dbName = dbName;
     }
@@ -446,21 +453,34 @@ void MainWindow::loadNotes()
     ui->noteList->clear();
     ui->action_Save_Note->setEnabled(false);
 
+    QString catString = "1";
+    if(!m_catList.empty()) {
+        if(m_leftPanel) {
+            catString = QString("( (%1) ").arg(tag_like).replace(QRegExp("KEYWORD"),m_catList[0]);
+            for(int i =1 ; i < m_catList.size() ; i++) 
+                catString += QString(" and (%1) ").arg(tag_like).replace(QRegExp("KEYWORD"),m_catList[i]);
+            catString += ")";
+        }
+        else {
+            catString = QString("( created like '%1%' ").arg(m_catList[0]);
+            for(int i =1 ; i < m_catList.size() ; i++) 
+                catString += QString("or created like '%1%' ").arg(m_catList[i]);
+            catString += ")";
+        }
+    }
     m_criterion = "";
     if(s_query != "") {
         m_criterion  = query_like[ui->comboBox->currentIndex()];
-        m_criterion  = " where " + m_criterion.replace(QRegExp("KEYWORD"),s_query);
+        m_criterion  = " where " + m_criterion.replace(QRegExp("KEYWORD"),s_query)+" and "+catString;
     }
-    if(!m_tagList.empty()) {
-        if(m_criterion == "") 
-            m_criterion = QString(" where (%1)").arg(tag_like).replace(QRegExp("KEYWORD"),m_tagList[0]);
-        else
-            m_criterion += QString(" and (%1)").arg(tag_like).replace(QRegExp("KEYWORD"),m_tagList[0]);
-        for(int i =1 ; i < m_tagList.size() ; i++) {
-            m_criterion += QString(" and (%1)").arg(tag_like).replace(QRegExp("KEYWORD"),m_tagList[i]);
-        }
-    }
-    QString sql = QString("select count(*) from notes %1").arg(m_criterion);
+    else
+        m_criterion = " where " + catString;
+
+    QString sql;
+    if(m_leftPanel)
+        sql = QString("select count(*) from notes %1").arg(m_criterion);
+    else
+        sql = QString("select count(*) from notes left join notes_attr on notes.rowid=notes_attr.rowid %1").arg(m_criterion);
     int found = m_q->SqlAggregateFuncResult(sql.toUtf8());
     ui->statusbar->showMessage(tr("%1 notes found").arg(found));
     ui->noteList->extend(found);
@@ -476,11 +496,11 @@ void MainWindow::instantSearch(const QString& query)
 void MainWindow::tagPressed(const QModelIndex &current)
 {
     QModelIndexList modelList = ui->tagView->selectionModel()->selectedIndexes();
-    m_tagList.clear();
+    m_catList.clear();
     for(int i =0 ; i < modelList.size() ; i++) {
-        m_tagList << modelList[i].data().toString();
+        m_catList << modelList[i].data().toString();
     }
-    if(m_tagList.indexOf(tr("All")) != -1) {
+    if(m_catList.indexOf(tr("All")) != -1) {
         ui->tagView->selectionModel()->clearSelection();
         ui->tagView->setCurrentIndex(current);
     }
@@ -493,14 +513,14 @@ void MainWindow::tagChanged(const QItemSelection &selected, const QItemSelection
         return;
 
     QModelIndexList modelList = ui->tagView->selectionModel()->selectedIndexes();
-    m_tagList.clear();
+    m_catList.clear();
     for(int i =0 ; i < modelList.size() ; i++) {
-        m_tagList << modelList[i].data().toString();
+        m_catList << modelList[i].data().toString();
     }
-    if(m_tagList.indexOf(tr("All")) != -1) 
-        m_tagList.clear();
+    if(m_catList.indexOf(tr("All")) != -1) 
+        m_catList.clear();
     else
-        m_tagList.sort();
+        m_catList.sort();
     loadNotes();
 }
 void MainWindow::splitterMoved()
@@ -528,6 +548,17 @@ int MainWindow::insertNote(QString& title, QString& content, QString& tag, QStri
         sql = QString("INSERT INTO notes_attr(created) VALUES('%1')").arg(datetime);
         m_q->SqlStatement(sql.toUtf8());
         ret = 0;
+
+        QString month = datetime.mid(0,7);
+        QStringList lst = m_monthModel->stringList();
+        if(lst.indexOf(month) == -1) {
+            int i = 1, len = lst.count();
+            while(i < len && lst[i] < month) {
+                i++;
+            }
+            if(m_monthModel->insertRows(i,1)) 
+                m_monthModel->setData(m_monthModel->index(i),month);
+        }
     }
     return ret;
 }
@@ -594,11 +625,11 @@ bool MainWindow::saveNote(int row, QString& title, QString& content, QStringList
                 int oldTagSize = oldTags.size();
                 for(i=0; i<oldTagSize; ++i) {
                     if(getTagCount(oldTags[i]) == 0)
-                        emit tagRemoved(oldTags[i]);
+                        removeTag(oldTags[i]);
                 }
                 for(i=0; i<tagSize; ++i) {
                     if(newTagCount[i] == 0)
-                        emit tagAdded(tags[i]);
+                        addTag(tags[i]);
                 }
                 ret = true;
             }
@@ -609,7 +640,7 @@ bool MainWindow::saveNote(int row, QString& title, QString& content, QStringList
                 ret = true;
                 for(i=0; i<tagSize; ++i) {
                     if(newTagCount[i] == 0)
-                        emit tagAdded(tags[i]);
+                        addTag(tags[i]);
                 }
             }
             else
@@ -696,8 +727,17 @@ bool MainWindow::delActiveNote()
     int row = activeItem->getNoteId();
     bool ret = false;
     if(row > 0) {
+        QString oldMonth;
+        QString sql = QString("select created from notes_attr where rowid=%1").arg(row);
+        m_q->Sql(sql.toUtf8());
+        if(m_q->FetchRow()) {
+            oldMonth = (char*)m_q->GetColumnCString(0);
+            oldMonth = oldMonth.mid(0,7);
+        }
+        m_q->FreeQuery();
+
         QStringList oldTags = getTagsOf(row);
-        QString sql = QString("delete from notes where rowid=%1").arg(row);
+        sql = QString("delete from notes where rowid=%1").arg(row);
         m_q->SqlStatement(sql.toUtf8());
         sql = QString("delete from notes_attr where rowid=%1").arg(row);
         m_q->SqlStatement(sql.toUtf8());
@@ -711,8 +751,18 @@ bool MainWindow::delActiveNote()
         int i, oldTagSize = oldTags.size();
         for(i=0; i<oldTagSize; ++i) {
             if(getTagCount(oldTags[i]) == 0)
-                emit tagRemoved(oldTags[i]);
+                removeTag(oldTags[i]);
         }
+
+        sql = QString("select count(*) from notes_attr where (created like '%1%')").arg(oldMonth);
+        m_q->Sql(sql.toUtf8());
+        if(m_q->FetchRow() && m_q->GetColumnInt(0) == 0) {
+            i = m_monthModel->stringList().indexOf(oldMonth);
+            if(i > 0) 
+                m_monthModel->removeRows(i,1);
+        }
+        m_q->FreeQuery();
+
         ret = true;
     }
     else
@@ -750,11 +800,17 @@ void MainWindow::editActiveNote()
     ui->action_Save_Note->setEnabled(true);
     resizeEvent(0);
 }
-void MainWindow::setCurrentTag(const QString& tag) {
-    if(m_tagList.size() == 1 && m_tagList[0] == tag)
+void MainWindow::setCurrentCat(const QString& cat) {
+    if(m_catList.size() == 1 && m_catList[0] == cat)
         loadNotes();
-    else
-        ui->tagView->setCurrentIndex(m_tagModel->index(m_tagModel->stringList().indexOf(tag)));
+    else {
+        QModelIndex idx;
+        if(m_leftPanel) 
+            idx = m_tagModel->index(m_tagModel->stringList().indexOf(cat));
+        else 
+            idx = m_monthModel->index(m_monthModel->stringList().indexOf(cat));
+        ui->tagView->setCurrentIndex(idx);
+    }
 }
 void MainWindow::saveNote()
 {
@@ -768,15 +824,14 @@ void MainWindow::statusMessage(const QString& msg)
 void MainWindow::importDone(int action)
 {
     if(action == 0)
-        refreshTag();
+        refreshCat();
     m_importDialog->setFinishFlag(true);
     m_importDialog->close();
 }
-void MainWindow::refreshTag()
+void MainWindow::refreshCat()
 {
     QStringList tagList;
     m_q->Sql("select distinct tag from notes");
-    QString tag;
     while(m_q->FetchRow()) {
         tagList << QString::fromUtf8((char*)m_q->GetColumnCString(0)).split(",");
     }
@@ -785,6 +840,17 @@ void MainWindow::refreshTag()
     tagList.removeDuplicates();
     tagList.prepend(tr("All"));
     m_tagModel->setStringList(tagList);
+
+    QStringList monthList;
+    m_q->Sql("select distinct substr(created,0,8) from notes left join notes_attr on notes.rowid=notes_attr.rowid");
+    while(m_q->FetchRow()) {
+        monthList << (char*)m_q->GetColumnCString(0);
+    }
+    m_q->FreeQuery();
+    monthList.sort();
+    monthList.prepend(tr("All"));
+    m_monthModel->setStringList(monthList);
+
 }
 ImportDialog::ImportDialog(QWidget *parent) : QDialog(parent, Qt::Tool)
 {
@@ -910,7 +976,7 @@ void NotesImporter::run()
                 writer.writeStartElement("note");
                 writer.writeAttribute("title", QString::fromUtf8((char*)q->GetColumnCString(1)));
                 writer.writeAttribute("tags", QString::fromUtf8((char*)q->GetColumnCString(3)));
-                writer.writeAttribute("created", QString::fromUtf8((char*)q->GetColumnCString(4)));
+                writer.writeAttribute("created", (char*)q->GetColumnCString(4));
                 writer.writeCDATA(QString::fromUtf8((char*)q->GetColumnCString(2)));
 
                 q_res.Sql(QString("select res_name,res_type,res_data from notes_res where noteid=%1").arg(noteId).toUtf8());
@@ -1004,6 +1070,25 @@ void MainWindow::changeLanguage()
         m_lang = lang;
         ui->retranslateUi(this);
         m_tagModel->setData(m_tagModel->index(0),tr("All"));
+        m_monthModel->setData(m_monthModel->index(0),tr("All"));
+    }
+}
+void MainWindow::changeLeftPanel()
+{
+    QAction *act = qobject_cast<QAction*>(sender());
+    if(act == ui->action_Tag_List) {
+        if(!m_leftPanel) {
+            ui->tagView->setModel(m_tagModel);
+            m_leftPanel = true;
+            connect(ui->tagView, SIGNAL(pressed(const QModelIndex&)), this, SLOT(tagPressed(const QModelIndex&)));
+            connect(ui->tagView->selectionModel(), SIGNAL(selectionChanged(const QItemSelection&, const QItemSelection&)), this, SLOT(tagChanged(const QItemSelection&, const QItemSelection&)));
+        }
+    }
+    else if(m_leftPanel) {
+        ui->tagView->setModel(m_monthModel);
+        m_leftPanel = false;
+        connect(ui->tagView, SIGNAL(pressed(const QModelIndex&)), this, SLOT(tagPressed(const QModelIndex&)));
+        connect(ui->tagView->selectionModel(), SIGNAL(selectionChanged(const QItemSelection&, const QItemSelection&)), this, SLOT(tagChanged(const QItemSelection&, const QItemSelection&)));
     }
 }
 void MainWindow::usage()
