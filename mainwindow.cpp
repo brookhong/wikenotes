@@ -6,7 +6,7 @@
 #endif
 
 QString MainWindow::s_query;
-QFont MainWindow::s_font(tr("Tahoma"), 10);
+QFont MainWindow::s_font("Tahoma", 10);
 QFontMetrics MainWindow::s_fontMetrics(MainWindow::s_font);
 TagCompleter MainWindow::s_tagCompleter;
 const char* query_like[] = {
@@ -19,6 +19,7 @@ const char* query_like[] = {
 const char* sort_by[] = {
     "created",
     "title",
+    "tag",
     "length(content)",
 };
 const char* tag_like = "tag like 'KEYWORD' or tag like 'KEYWORD,%' or tag like '%,KEYWORD,%' or tag like '%,KEYWORD'";
@@ -64,16 +65,6 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->actionMonthly_List, SIGNAL(triggered()), this, SLOT(changeLeftPanel()));
 
     loadSettings();
-    m_bSettings = false;
-    if(m_dbName.isEmpty())
-        m_dbName = QCoreApplication::applicationDirPath()+QDir::separator()+"default.wike";
-    if(m_lang.isEmpty()) 
-        m_lang = QLocale::system().name();
-
-    if(m_translator.load(m_lang+".qm", ".")){
-        qApp->installTranslator(&m_translator);
-        ui->retranslateUi(this);
-    }
 
     QAction *action_English = new QAction(this);
     action_English->setText("en_US");
@@ -127,9 +118,8 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(&m_importer, SIGNAL(importDone(int)), this, SLOT(importDone(int)));
 
     m_monthModel = new QStringListModel();
-
     m_tagModel = new QStringListModel();
-    ui->tagView->setModel(m_tagModel);
+    ui->tagView->setModel(m_leftPanel?m_tagModel:m_monthModel);
     s_tagCompleter.setModel(m_tagModel);
     ui->tagView->setSelectionMode(QAbstractItemView::ExtendedSelection);
     connect(ui->tagView, SIGNAL(pressed(const QModelIndex&)), this, SLOT(tagPressed(const QModelIndex&)));
@@ -160,106 +150,79 @@ void MainWindow::createTrayIcon()
 }
 void MainWindow::loadSettings()
 {
-    QFile file(QCoreApplication::applicationDirPath()+QDir::separator()+"config.xml");
-    if (file.open(QIODevice::ReadOnly)) {
-        QXmlStreamReader xml(&file);
-        while (!xml.atEnd()) {
-            if (xml.isStartElement()) {
-                if(xml.name() == "text_font") {
-                    QXmlStreamAttributes attrs = xml.attributes();
-                    s_font = QFont(attrs.value("name").toString(), attrs.value("size").toString().toInt());
-                    s_fontMetrics = QFontMetrics(s_font);
-                }
-                else if(xml.name() == "toggle_main_window") {
-                    QXmlStreamAttributes attrs = xml.attributes();
-                    m_hkToggleMain->setShortcut(QKeySequence(attrs.value("shortcut").toString()));
-                }
-                else if(xml.name() == "new_text_note") {
-                    QXmlStreamAttributes attrs = xml.attributes();
-                    m_hkNewTextNote->setShortcut(QKeySequence(attrs.value("shortcut").toString()));
-                }
-                else if(xml.name() == "default_notes_library") {
-                    QXmlStreamAttributes attrs = xml.attributes();
-                    QString dbName = attrs.value("name").toString();
-                    QDir dir(dbName.mid(0, dbName.lastIndexOf(QDir::separator())));
-                    if(!dir.exists()) {
-                        m_bSettings = true;
-                        QMessageBox::warning(this, "WikeNotes", tr("Directory %1 not exists, default notes library will be used.").arg(dir.path())); 
-                    }
-                    else
-                        m_dbName = dbName;
-                }
-                else if(xml.name() == "language") {
-                    QXmlStreamAttributes attrs = xml.attributes();
-                    m_lang = attrs.value("name").toString();
-                }
-                else if(xml.name() == "external_command") {
-                    QXmlStreamAttributes attrs = xml.attributes();
-                    QAction* action = new QAction(attrs.value("name").toString(), this);
-                    action->setData(attrs.value("command").toString());
-                    action->setShortcut(QKeySequence(attrs.value("shortcut").toString()));
-                    connect(action, SIGNAL(triggered()), this, SLOT(extActions()));
-                    m_extActions.append(action);
-                }
-            }
-            xml.readNext();
-        }
-        file.close();
+    QSettings settings(QCoreApplication::applicationDirPath()+"/wikenotes.conf", QSettings::IniFormat, this);
+
+    if(settings.contains("default_notes_library")) {
+        QString dbName = settings.value("default_notes_library").toString();
+        QDir dir(dbName.mid(0, dbName.lastIndexOf('/')));
+        if(!dir.exists()) 
+            QMessageBox::warning(this, "WikeNotes", tr("Directory %1 not exists, default notes library will be used.").arg(dir.path())); 
+        else
+            m_dbName = dbName;
     }
+    if(m_dbName.isEmpty())
+        m_dbName = QCoreApplication::applicationDirPath()+"/default.wike";
+
+    if(settings.contains("font_name") || settings.contains("font_size")) {
+        s_font = QFont(settings.value("font_name").toString(), settings.value("font_size").toInt());
+        s_fontMetrics = QFontMetrics(s_font);
+    }
+    if(settings.contains("toggle_main_window")) 
+        m_hkToggleMain->setShortcut(QKeySequence(settings.value("toggle_main_window").toString()));
+    if(settings.contains("new_text_note")) 
+        m_hkNewTextNote->setShortcut(QKeySequence(settings.value("new_text_note").toString()));
+
+    if(settings.contains("language")) 
+        m_lang = settings.value("language").toString();
+    if(m_lang.isEmpty()) 
+        m_lang = QLocale::system().name();
+    if(m_lang != "en_US" && m_translator.load(m_lang+".qm", ".")) {
+        qApp->installTranslator(&m_translator);
+        ui->retranslateUi(this);
+    }
+
+    if(settings.contains("taglist")) 
+        m_leftPanel = (settings.value("language").toString() == "true");
+    if(settings.contains("matched_in")) 
+        ui->comboBox->setCurrentIndex(settings.value("matched_in").toInt());
+    if(settings.contains("sort_by")) 
+        ui->comboBoxSort->setCurrentIndex(settings.value("sort_by").toInt());
+    if(settings.contains("reverse_sorting")) 
+        ui->checkBox->setCheckState((settings.value("reverse_sorting").toInt()==0)?Qt::Unchecked:Qt::Checked);
+
+    QAction* action = new QAction("google search", this);
+    action->setData("http://www.google.com/#q=%select%");
+    action->setShortcut(QKeySequence("Alt+G"));
+    connect(action, SIGNAL(triggered()), this, SLOT(extActions()));
+    m_extActions.append(action);
+
+    action = new QAction("baidu search", this);
+    action->setData("http://www.baidu.com/s?wd=%select%");
+    action->setShortcut(QKeySequence("Alt+B"));
+    connect(action, SIGNAL(triggered()), this, SLOT(extActions()));
+    m_extActions.append(action);
+}
+void MainWindow::updateSettings(QSettings& settings, const QString& current, const QString& def, const QString& key)
+{
+    if(current != def && current != "")
+        settings.setValue(key, current);
+    else if(settings.contains(key))
+        settings.remove(key);
 }
 void MainWindow::flushSettings()
 {
-    QFile file(QCoreApplication::applicationDirPath()+QDir::separator()+"config.xml");
-    if (file.open(QIODevice::WriteOnly)) {
-        QByteArray xmlData = QByteArray();
+    QSettings conf(QCoreApplication::applicationDirPath()+"/wikenotes.conf", QSettings::IniFormat, this);
 
-        QXmlStreamWriter writer(&xmlData);
-        writer.setAutoFormatting(true);
-
-        writer.writeStartDocument();
-
-        writer.writeStartElement("config");
-
-            writer.writeStartElement("default_notes_library");
-            writer.writeAttribute("name", m_dbName);
-            writer.writeEndElement();
-
-            writer.writeStartElement("language");
-            writer.writeAttribute("name", m_lang);
-            writer.writeEndElement();
-
-            writer.writeStartElement("text_font");
-            writer.writeAttribute("name", s_font.family());
-            writer.writeAttribute("size", QString("%1").arg(s_font.pointSize()));
-            writer.writeEndElement();
-
-            writer.writeStartElement("hotkeys");
-                writer.writeStartElement("toggle_main_window");
-                writer.writeAttribute("shortcut", m_hkToggleMain->shortcut().toString());
-                writer.writeEndElement();
-                writer.writeStartElement("new_text_note");
-                writer.writeAttribute("shortcut", m_hkNewTextNote->shortcut().toString());
-                writer.writeEndElement();
-            writer.writeEndElement();
-
-            writer.writeStartElement("external_commands");
-                for (int i = 0; i < m_extActions.size(); ++i) {
-                    writer.writeStartElement("external_command");
-                    writer.writeAttribute("name", m_extActions[i]->text());
-                    writer.writeAttribute("command", m_extActions[i]->data().toString());
-                    writer.writeAttribute("shortcut", m_extActions[i]->shortcut().toString());
-                    writer.writeEndElement();
-                }
-            writer.writeEndElement();
-
-        writer.writeEndElement();
-
-        writer.writeEndDocument();
-
-        file.write(xmlData);
-        file.flush();
-        file.close();
-    }
+    updateSettings(conf, m_dbName, QCoreApplication::applicationDirPath()+"/default.wike", "default_notes_library");
+    updateSettings(conf, s_font.family(), "Tahoma", "font_name");
+    updateSettings(conf, QString("%1").arg(s_font.pointSize()), "10", "font_size");
+    updateSettings(conf, m_hkToggleMain->shortcut().toString(), "Alt+Q", "toggle_main_window");
+    updateSettings(conf, m_hkNewTextNote->shortcut().toString(), "Ctrl+1", "new_text_note");
+    updateSettings(conf, m_lang, QLocale::system().name(), "language");
+    updateSettings(conf, m_leftPanel?"true":"false", "true", "taglist");
+    updateSettings(conf, QString("%1").arg(ui->comboBox->currentIndex()), "0", "matched_in");
+    updateSettings(conf, QString("%1").arg(ui->comboBoxSort->currentIndex()), "0", "sort_by");
+    updateSettings(conf, QString("%1").arg(ui->checkBox->checkState()), "0", "reverse_sorting");
 }
 void MainWindow::toggleVisibility()
 {
@@ -285,14 +248,12 @@ void MainWindow::silentNewTextNote()
     QClipboard *clipboard = QApplication::clipboard();
     QString content = clipboard->text();
     QString title = getTitleFromContent(content);
-    QStringList tags;
-    tags << tr("Untagged");
-    QDateTime dt = QDateTime::currentDateTime();
-    QString date = dt.toString("yyyy-MM-dd hh:mm:ss");
+    QString tag = tr("Untagged");
+    QString datetime = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
 
-    if(saveNote(0, title, content, tags, date)) {
-        setCurrentCat(tags[0]);
-    }
+    QString hashKey = QCryptographicHash::hash(content.toUtf8(), QCryptographicHash::Sha1).toHex();
+    if(insertNote(title, content, tag, hashKey, datetime) == 0)
+        setCurrentCat(tag);
 }
 void MainWindow::handleSingleMessage(const QString&msg)
 {
@@ -319,8 +280,7 @@ void MainWindow::iconActivated(QSystemTrayIcon::ActivationReason reason)
 }
 MainWindow::~MainWindow()
 {
-    if(m_bSettings)
-        flushSettings();
+    flushSettings();
     delete ui;
 }
 void MainWindow::newDB()
@@ -507,11 +467,6 @@ void MainWindow::tagPressed(const QModelIndex &current)
 }
 void MainWindow::tagChanged(const QItemSelection &selected, const QItemSelection &deselected)
 {
-    NoteItem* activeItem = NoteItem::getActiveItem();
-    //Do NOT update notelist whenever editing a note
-    if(activeItem && !activeItem->isReadOnly()) 
-        return;
-
     QModelIndexList modelList = ui->tagView->selectionModel()->selectedIndexes();
     m_catList.clear();
     for(int i =0 ; i < modelList.size() ; i++) {
@@ -584,71 +539,6 @@ bool MainWindow::insertNoteRes(QString& res_name, int noteId, int res_type, cons
 int MainWindow::lastInsertId()
 {
     return m_db->GetLastInsertRowId();
-}
-bool MainWindow::saveNote(int row, QString& title, QString& content, QStringList& tags, QString& datetime)
-{
-    bool ret = false;
-    QString hashKey = QCryptographicHash::hash(content.toUtf8(), QCryptographicHash::Sha1).toHex();
-    if(!tags.empty()) {
-        int i, tagSize = tags.size();
-        int *newTagCount = new int[tagSize];
-        for(i=0; i<tagSize; ++i) {
-            newTagCount[i] = getTagCount(tags[i]);
-        }
-        if(row > 0) {
-            QString sql = "select rowid from notes where hash='"+hashKey+"'";
-            m_q->Sql(sql.toUtf8());
-            int conflictRow = row;
-            if(m_q->FetchRow()) 
-                conflictRow = m_q->GetColumnInt(0);
-            m_q->FreeQuery();
-
-            if(conflictRow != row) {
-                statusMessage(tr("There exists a note with the same content, thus I will NOT same this one."));
-            }
-            else {
-                QStringList oldTags = getTagsOf(row);
-                QStringList ups;
-                title.replace("'","''");
-                content.replace("'","''");
-                sql = "UPDATE notes SET ";
-                if(title != "")
-                    ups << "title='"+title+"'";
-                if(content != "") {
-                    ups << "content='"+content+"'";
-                    ups << "hash='"+hashKey+"'";
-                }
-                ups << "tag='"+tags.join(",")+"'";
-                sql += ups.join(",");
-                sql += QString(" WHERE rowid=%1").arg(row);
-                m_q->SqlStatement(sql.toUtf8());
-                int oldTagSize = oldTags.size();
-                for(i=0; i<oldTagSize; ++i) {
-                    if(getTagCount(oldTags[i]) == 0)
-                        removeTag(oldTags[i]);
-                }
-                for(i=0; i<tagSize; ++i) {
-                    if(newTagCount[i] == 0)
-                        addTag(tags[i]);
-                }
-                ret = true;
-            }
-        }
-        else {
-            QString tag = tags.join(",");
-            if(insertNote(title, content, tag, hashKey, datetime) == 0) {
-                ret = true;
-                for(i=0; i<tagSize; ++i) {
-                    if(newTagCount[i] == 0)
-                        addTag(tags[i]);
-                }
-            }
-            else
-                statusMessage(tr("There exists a note with the same content, thus I will NOT same this one."));
-        }
-        delete newTagCount;
-    }
-    return ret;
 }
 void MainWindow::resizeEvent(QResizeEvent * event)
 {
@@ -815,7 +705,130 @@ void MainWindow::setCurrentCat(const QString& cat) {
 void MainWindow::saveNote()
 {
     NoteItem* activeItem = NoteItem::getActiveItem();
-    activeItem->saveNote();
+
+    QString datetime = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
+    int noteId = activeItem->getNoteId();
+    QString title = activeItem->getTitle();
+    QString content = activeItem->getContent();
+    QStringList tags = activeItem->getTags();
+
+    bool ret = false;
+    QString hashKey = QCryptographicHash::hash(content.toUtf8(), QCryptographicHash::Sha1).toHex();
+    if(!tags.empty()) {
+        int i, tagSize = tags.size();
+        int *newTagCount = new int[tagSize];
+        for(i=0; i<tagSize; ++i) {
+            newTagCount[i] = getTagCount(tags[i]);
+        }
+        if(noteId > 0) {
+            QString sql = "select rowid from notes where hash='"+hashKey+"'";
+            m_q->Sql(sql.toUtf8());
+            int conflictRow = noteId;
+            if(m_q->FetchRow()) 
+                conflictRow = m_q->GetColumnInt(0);
+            m_q->FreeQuery();
+
+            if(conflictRow != noteId) {
+                statusMessage(tr("There exists a note with the same content, thus I will NOT same this one."));
+            }
+            else {
+                QStringList oldTags = getTagsOf(noteId);
+                QStringList ups;
+                title.replace("'","''");
+                content.replace("'","''");
+                sql = "UPDATE notes SET ";
+                if(title != "")
+                    ups << "title='"+title+"'";
+                if(content != "") {
+                    ups << "content='"+content+"'";
+                    ups << "hash='"+hashKey+"'";
+                }
+                ups << "tag='"+tags.join(",")+"'";
+                sql += ups.join(",");
+                sql += QString(" WHERE rowid=%1").arg(noteId);
+                m_q->SqlStatement(sql.toUtf8());
+                int oldTagSize = oldTags.size();
+                for(i=0; i<oldTagSize; ++i) {
+                    if(getTagCount(oldTags[i]) == 0)
+                        removeTag(oldTags[i]);
+                }
+                for(i=0; i<tagSize; ++i) {
+                    if(newTagCount[i] == 0)
+                        addTag(tags[i]);
+                }
+                ret = true;
+            }
+        }
+        else {
+            QString tag = tags.join(",");
+            if(insertNote(title, content, tag, hashKey, datetime) == 0) {
+                ret = true;
+                for(i=0; i<tagSize; ++i) {
+                    if(newTagCount[i] == 0)
+                        addTag(tags[i]);
+                }
+            }
+            else
+                statusMessage(tr("There exists a note with the same content, thus I will NOT same this one."));
+        }
+        delete newTagCount;
+    }
+
+    if(ret) {
+        if(activeItem->isRich()) {
+            QStringList res_to_remove;
+            QStringList res_to_add;
+            QStringList::Iterator it;
+            QRegExp rx("<img[^>]*src=\"wike://([0-9a-f]+)\"[^>]*>");
+            int pos = 0;
+            QString imgName, sql;
+            while ((pos = rx.indexIn(content, pos)) != -1) {
+                imgName = rx.cap(1);
+                if(!res_to_add.contains(imgName)) 
+                    res_to_add << imgName;
+
+                pos += rx.matchedLength();
+            }
+            if(noteId == 0)
+                noteId = lastInsertId();
+            else {
+                sql = QString("select res_name from notes_res where noteid=%1").arg(noteId);
+                m_q->Sql(sql.toUtf8());
+                while(m_q->FetchRow()) {
+                    res_to_remove << QString::fromUtf8((char*)m_q->GetColumnCString(0));
+                }
+                it = res_to_remove.begin();
+                while(it != res_to_remove.end()) {
+                    if(res_to_add.contains(*it)) {
+                        res_to_add.removeOne(*it);
+                        it = res_to_remove.erase(it);
+                    }
+                    else
+                        it++;
+                }
+            }
+            for(it = res_to_remove.begin(); it != res_to_remove.end(); it++) {
+                sql = QString("delete from notes_res where noteid=%1 and res_name='%2'").arg(noteId).arg(*it);
+                m_q->SqlStatement(sql.toUtf8());
+            }
+
+            const QMap<QString, QImage>& imgs = activeItem->getAttachedImages();
+            for(it = res_to_add.begin(); it != res_to_add.end(); it++) {
+                imgName = *it;
+                QImage image = imgs[imgName];
+
+                QBuffer buffer;
+                QImageWriter writer(&buffer, "PNG");
+                writer.write(image);
+
+                insertNoteRes(imgName, noteId, (int)QTextDocument::ImageResource, buffer.data());
+            }
+        }
+        if(m_leftPanel)
+            setCurrentCat(tags[0]);
+        else 
+            setCurrentCat(datetime.mid(0,7));
+    }
 }
 void MainWindow::statusMessage(const QString& msg)
 {
@@ -1032,7 +1045,6 @@ void MainWindow::setNoteFont()
     s_font = QFontDialog::getFont(&ok, s_font, this);
     s_fontMetrics = QFontMetrics(s_font);
     if (ok) {
-        m_bSettings = true;
         ui->noteList->setTextNoteFont(s_font);
     }
 }
@@ -1044,7 +1056,6 @@ void MainWindow::setHotKey()
     m_hkToggleMain->setShortcut(QKeySequence());
     m_hkNewTextNote->setShortcut(QKeySequence());
     if(diag.exec() == QDialog::Accepted) {
-        m_bSettings = true;
         m_hkToggleMain->setShortcut(diag.m_hkTM);
         m_hkNewTextNote->setShortcut(diag.m_hkNTN);
     }
@@ -1066,7 +1077,6 @@ void MainWindow::changeLanguage()
         qApp->installTranslator(&m_translator);
     }
     if(m_lang != lang) {
-        m_bSettings = true;
         m_lang = lang;
         ui->retranslateUi(this);
         m_tagModel->setData(m_tagModel->index(0),tr("All"));
@@ -1152,7 +1162,7 @@ void MainWindow::extActions()
             QProcess::startDetached(cmdLine);
         else {
             QByteArray msg = cmdLine.mid(s+1).trimmed().toLocal8Bit();
-            QString fn = QDir::tempPath()+QDir::separator()+QCryptographicHash::hash(msg, QCryptographicHash::Sha1).toHex()+".txt";
+            QString fn = QDir::tempPath()+"/"+QCryptographicHash::hash(msg, QCryptographicHash::Sha1).toHex()+".txt";
             QFile file(fn);
             file.open(QIODevice::WriteOnly);
             file.write(msg);

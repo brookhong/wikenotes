@@ -241,6 +241,62 @@ int NoteItem::getNoteId() const
 {
     return m_noteId;
 }
+QString NoteItem::getTitle()
+{
+    return (m_readOnly)?m_title->text():m_titleEdit->text();
+}
+QStringList NoteItem::getTags()
+{
+    QStringList tags;
+    QString tag;
+    if(m_readOnly)
+        ;
+    else {
+        tag = m_tagEdit->text();
+        tag = tag.replace(QRegExp("^\\s+"),"");
+        tag = tag.replace(QRegExp("\\s+$"),"");
+        tag = tag.replace(QRegExp("\\s*,\\s*"),",");
+        tags = tag.split(",");
+        tags.sort();
+    }
+    return tags;
+}
+const QMap<QString, QImage>& NoteItem::getAttachedImages()
+{
+    return m_images;
+}
+QString NoteItem::getContent()
+{
+    if(m_rich) {
+        QWebFrame* mainFrame = m_webView->page()->mainFrame();
+        QWebFrame* iframe = mainFrame->childFrames()[0];
+        QWebElementCollection col = iframe->findAllElements("img");
+        QString imgName;
+        QRegExp rx("\"wike://([0-9a-f]+)\"");
+        foreach (QWebElement el, col) {
+            imgName = el.attribute("src");
+            if(el.attribute("embed").toLower() != "link" && !rx.exactMatch(imgName)) {
+                QPixmap pix(el.geometry().size());
+                QPainter p(&pix);
+                el.render(&p);
+                QImage image = pix.toImage();
+
+                QByteArray imgBlock((const char *)image.bits(), image.byteCount());
+                QByteArray sha1Sum = QCryptographicHash::hash(imgBlock, QCryptographicHash::Sha1);
+                imgName = sha1Sum.toHex();
+                el.setAttribute("src", "wike://"+imgName);
+                m_images[imgName] = image;
+            }
+        }
+
+        m_content = mainFrame->evaluateJavaScript("editor.updateTextArea();editor.$area.val();").toString();
+        m_content = m_content.replace(QRegExp("<!--StartFragment-->"),"");
+        m_content = m_content.replace(QRegExp("<!--EndFragment-->"),"");
+    }
+    else 
+        m_content = m_textEdit->toPlainText();
+    return m_content;
+}
 void NoteItem::exportFile()
 {
     m_q->Sql(QString("select title from notes where rowid=%1").arg(m_noteId).toUtf8());
@@ -405,109 +461,6 @@ NoteItem* NoteItem::getActiveItem()
 {
     return s_activeNote;
 }
-bool NoteItem::saveNote()
-{
-    bool ret = false;
-    QString date;
-    if(m_noteId == 0) {
-        QDateTime dt = QDateTime::currentDateTime();
-        date = dt.toString("yyyy-MM-dd hh:mm:ss");
-    }
-    QString title = m_titleEdit->text();
-    //m_webView->page()->mainFrame()->evaluateJavaScript(title); return false;
-    if(m_rich) {
-        QWebFrame* mainFrame = m_webView->page()->mainFrame();
-        QWebFrame* iframe = mainFrame->childFrames()[0];
-        QWebElementCollection col = iframe->findAllElements("img");
-        QString imgName;
-        QRegExp rx("\"wike://([0-9a-f]+)\"");
-        foreach (QWebElement el, col) {
-            imgName = el.attribute("src");
-            if(el.attribute("embed").toLower() != "link" && !rx.exactMatch(imgName)) {
-                QPixmap pix(el.geometry().size());
-                QPainter p(&pix);
-                el.render(&p);
-                QImage image = pix.toImage();
-
-                QByteArray imgBlock((const char *)image.bits(), image.byteCount());
-                QByteArray sha1Sum = QCryptographicHash::hash(imgBlock, QCryptographicHash::Sha1);
-                imgName = sha1Sum.toHex();
-                el.setAttribute("src", "wike://"+imgName);
-                m_images[imgName] = image;
-            }
-        }
-
-        m_content = mainFrame->evaluateJavaScript("editor.updateTextArea();editor.$area.val();").toString();
-        m_content = m_content.replace(QRegExp("<!--StartFragment-->"),"");
-        m_content = m_content.replace(QRegExp("<!--EndFragment-->"),"");
-    }
-    else {
-        m_content = m_textEdit->toPlainText();
-        if(title == tr("Untitled"))
-            title = MainWindow::getTitleFromContent(m_content);
-    }
-    QString tag = m_tagEdit->text();
-    tag = tag.replace(QRegExp("^\\s+"),"");
-    tag = tag.replace(QRegExp("\\s+$"),"");
-    tag = tag.replace(QRegExp("\\s*,\\s*"),",");
-    QStringList tags = tag.split(",");
-    tags.sort();
-    ret = g_mainWindow->saveNote(m_noteId, title, m_content, tags, date);
-    if(ret) {
-        if(m_rich) {
-            QStringList res_to_remove;
-            QStringList res_to_add;
-            QStringList::Iterator it;
-            QRegExp rx("<img[^>]*src=\"wike://([0-9a-f]+)\"[^>]*>");
-            int pos = 0;
-            QString imgName, sql;
-            while ((pos = rx.indexIn(m_content, pos)) != -1) {
-                imgName = rx.cap(1);
-                if(!res_to_add.contains(imgName)) 
-                    res_to_add << imgName;
-
-                pos += rx.matchedLength();
-            }
-            if(m_noteId == 0)
-                m_noteId = g_mainWindow->lastInsertId();
-            else {
-                sql = QString("select res_name from notes_res where noteid=%1").arg(m_noteId);
-                m_q->Sql(sql.toUtf8());
-                while(m_q->FetchRow()) {
-                    res_to_remove << QString::fromUtf8((char*)m_q->GetColumnCString(0));
-                }
-                it = res_to_remove.begin();
-                while(it != res_to_remove.end()) {
-                    if(res_to_add.contains(*it)) {
-                        res_to_add.removeOne(*it);
-                        it = res_to_remove.erase(it);
-                    }
-                    else
-                        it++;
-                }
-            }
-            for(it = res_to_remove.begin(); it != res_to_remove.end(); it++) {
-                sql = QString("delete from notes_res where noteid=%1 and res_name='%2'").arg(m_noteId).arg(*it);
-                m_q->SqlStatement(sql.toUtf8());
-            }
-
-            for(it = res_to_add.begin(); it != res_to_add.end(); it++) {
-                imgName = *it;
-                QImage image = m_images[imgName];
-
-                QBuffer buffer;
-                QImageWriter writer(&buffer, "PNG");
-                writer.write(image);
-
-                g_mainWindow->insertNoteRes(imgName, m_noteId, (int)QTextDocument::ImageResource, buffer.data());
-            }
-        }
-        //enable notelist update
-        m_readOnly = true;
-        g_mainWindow->setCurrentCat(tags[0]);
-    }
-    return ret;
-}
 void NoteItem::active()
 {
     setStyleSheet(".NoteItem { background-color : rgb(235,242,252); padding: 5px; border: 1px dashed blue; border-radius: 8px;}");
@@ -524,15 +477,4 @@ void NoteItem::active()
         textBrowser->setFocus();
     }
     g_mainWindow->ensureVisible(this);
-}
-bool NoteItem::close()
-{
-    bool ret = false;
-    if(m_titleEdit) {
-        ret = saveNote();
-    }
-    else {
-        ret = true;
-    }
-    return ret;
 }

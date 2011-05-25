@@ -72,9 +72,6 @@ class MainWindow : public QMainWindow
         ~MainWindow();
         void openDB();
         bool openDB(const QString& name);
-        int lastInsertId();
-        bool saveNote(int row, QString& title, QString& content, QStringList& tags, QString& datetime);
-        void setCurrentCat(const QString& cat);
 
         //0: success; 1: already exists; 2: other error
         int insertNote(QString& title, QString& content, QString& tag, QString& hashKey, QString& datetime);
@@ -134,9 +131,9 @@ class MainWindow : public QMainWindow
         QSystemTrayIcon *m_trayIcon;
         void createTrayIcon();
         void loadSettings();
+        inline void updateSettings(QSettings& settings, const QString& current, const QString& def, const QString& key);
         void flushSettings();
         QString m_dbName;
-        bool m_bSettings;
         QxtGlobalShortcut* m_hkToggleMain;
         QxtGlobalShortcut* m_hkNewTextNote;
         ImportDialog *m_importDialog;
@@ -160,6 +157,8 @@ class MainWindow : public QMainWindow
         void addTag(const QString& tag);
         void removeTag(const QString& tag);
         void refreshCat();
+        int lastInsertId();
+        void setCurrentCat(const QString& cat);
 
         QList<QAction*> m_extActions;
         QList<QProcess*> m_extProcs;

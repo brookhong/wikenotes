@@ -55,6 +55,10 @@ class NoteItem : public QFrame
     public:
         NoteItem(QWidget *parent = 0, int row = 0, bool readOnly = true, bool rich = true);
         int getNoteId() const;
+        QString getTitle();
+        QString getContent();
+        QStringList getTags();
+        const QMap<QString, QImage>& getAttachedImages();
         void setFont(const QFont& font);
         static NoteItem* getActiveItem();
         static void setActiveItem(NoteItem* item);
@@ -62,8 +66,6 @@ class NoteItem : public QFrame
         void initControls();
         bool isReadOnly();
         bool isRich();
-        bool saveNote();
-        bool close();
         QString selectedText();
 
     private:
