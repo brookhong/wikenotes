@@ -1,4 +1,5 @@
 #include "noteitem.h"
+#include "notelist.h"
 #include "highlighter.h"
 #include "mainwindow.h"
 RendererReply::RendererReply(QObject* object, const QNetworkRequest& request)
@@ -360,6 +361,18 @@ bool NoteItem::shortCut(int k)
             return true;
         case Qt::Key_X:
             exportFile();
+            return true;
+        case Qt::Key_Left:
+        case Qt::Key_Right:
+            {
+                NoteList *noteList = qobject_cast<NoteList*>(parentWidget());
+                NoteItem* item = noteList->getNextNote(this,(k==Qt::Key_Right)?1:-1);
+                if(item)
+                    NoteItem::setActiveItem(item);
+            }
+            return true;
+        case Qt::Key_Return:
+            g_mainWindow->editActiveNote();
             return true;
         default:
             return false;

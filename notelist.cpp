@@ -103,7 +103,7 @@ void NoteList::addNote(NoteItem* item)
 {
     m_notes.append(item);
 }
-NoteItem* NoteList::getNextNote(NoteItem* item)
+NoteItem* NoteList::getNextNote(NoteItem* item, int dir)
 {
     NoteItem* ret = 0;
     int i, n = m_notes.size();
@@ -112,10 +112,9 @@ NoteItem* NoteList::getNextNote(NoteItem* item)
             break;
         }
     }
-    if(i<n-1)
-        ret = m_notes[i+1];
-    if(!ret && i>0)
-        ret = m_notes[i-1];
+    i = i+dir;
+    if(i >= 0 && i<n)
+        ret = m_notes[i];
     return ret;
 }
 void NoteList::removeNote(NoteItem* item)

@@ -36,7 +36,7 @@
      </widget>
     </item>
     <item row="0" column="2">
-     <widget class="QComboBox" name="comboBox">
+     <widget class="QComboBox" name="comboBoxMatch">
       <item>
        <property name="text">
         <string>Everywhere</string>
@@ -102,7 +102,18 @@
       </property>
      </widget>
     </item>
-    <item row="3" column="0" colspan="6">
+    <item row="0" column="6">
+     <widget class="QLabel" name="labelPage">
+      <property name="text">
+       <string>Page</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="7">
+     <widget class="PageList" name="comboBoxPage">
+     </widget>
+    </item>
+    <item row="1" column="0" colspan="8">
      <widget class="QSplitter" name="vsplitter">
       <property name="orientation">
        <enum>Qt::Horizontal</enum>

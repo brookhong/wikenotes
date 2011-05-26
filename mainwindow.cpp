@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "pagelist.h"
 #include "hotkeysettings.h"
 #include "ui_mainwindow.h"
 #ifdef WIN32
@@ -9,6 +10,7 @@ QString MainWindow::s_query;
 QFont MainWindow::s_font("Tahoma", 10);
 QFontMetrics MainWindow::s_fontMetrics(MainWindow::s_font);
 TagCompleter MainWindow::s_tagCompleter;
+const int page_size = 20;
 const char* query_like[] = {
     "(content like '%KEYWORD%' or title like '%KEYWORD%' or tag like '%KEYWORD%')",
     "(content like '%KEYWORD%' or title like '%KEYWORD%')",
@@ -43,6 +45,16 @@ QString TagCompleter::pathFromIndex(const QModelIndex &index) const
     }
     return path;
 }
+void PageList::focusInEvent(QFocusEvent * e)
+{
+    if(m_pageNum != count()) {
+        QStringList pages;
+        for(int i=1; i<=m_pageNum;i++)
+            pages << QString("%1").arg(i);
+        clear();
+        insertItems(0, pages);
+    }
+}
 //QFile g_log;
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -50,6 +62,8 @@ MainWindow::MainWindow(QWidget *parent) :
 {
     QNetworkProxyFactory::setUseSystemConfiguration(true);
     ui->setupUi(this);
+    ui->comboBoxPage->insertItem(0,"1");
+    ui->comboBoxPage->setFixedWidth(40);
     createTrayIcon();
 
     m_hkToggleMain = new QxtGlobalShortcut(this);
@@ -92,9 +106,10 @@ MainWindow::MainWindow(QWidget *parent) :
 
     ui->searchBox->setStyleSheet("#searchBox {padding: 0 18px;background:url(:/search.png) no-repeat}");
     connect(ui->searchBox, SIGNAL(textChanged(const QString&)), this, SLOT(instantSearch(const QString&)));
-    connect(ui->comboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(loadNotes()));
+    connect(ui->comboBoxMatch, SIGNAL(currentIndexChanged(int)), this, SLOT(loadNotes()));
     connect(ui->comboBoxSort, SIGNAL(currentIndexChanged(int)), this, SLOT(loadNotes()));
     connect(ui->checkBox, SIGNAL(stateChanged(int)), this, SLOT(loadNotes()));
+    connect(ui->comboBoxPage, SIGNAL(currentIndexChanged(int)), this, SLOT(loadPage()));
     connect(ui->vsplitter, SIGNAL(splitterMoved(int,int)), this, SLOT(splitterMoved()));
 
     addAction(ui->actionFocusSearchBox);
@@ -184,7 +199,7 @@ void MainWindow::loadSettings()
     if(settings.contains("taglist")) 
         m_leftPanel = (settings.value("language").toString() == "true");
     if(settings.contains("matched_in")) 
-        ui->comboBox->setCurrentIndex(settings.value("matched_in").toInt());
+        ui->comboBoxMatch->setCurrentIndex(settings.value("matched_in").toInt());
     if(settings.contains("sort_by")) 
         ui->comboBoxSort->setCurrentIndex(settings.value("sort_by").toInt());
     if(settings.contains("reverse_sorting")) 
@@ -220,7 +235,7 @@ void MainWindow::flushSettings()
     updateSettings(conf, m_hkNewTextNote->shortcut().toString(), "Ctrl+1", "new_text_note");
     updateSettings(conf, m_lang, QLocale::system().name(), "language");
     updateSettings(conf, m_leftPanel?"true":"false", "true", "taglist");
-    updateSettings(conf, QString("%1").arg(ui->comboBox->currentIndex()), "0", "matched_in");
+    updateSettings(conf, QString("%1").arg(ui->comboBoxMatch->currentIndex()), "0", "matched_in");
     updateSettings(conf, QString("%1").arg(ui->comboBoxSort->currentIndex()), "0", "sort_by");
     updateSettings(conf, QString("%1").arg(ui->checkBox->checkState()), "0", "reverse_sorting");
 }
@@ -331,25 +346,24 @@ bool MainWindow::openDB(const QString& dbName)
     bool init = !QFile::exists(dbName);
     m_db = new SQLiteDatabase(dbName.toUtf8(), SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, 0);
     m_q = new SQLiteStatement(m_db);
-    QString defaultKey = "jessie&brook";
     if(init) {        
         QString password = QInputDialog::getText(this, "WikeNotes",
                 tr("Would you like to protect your notes library with a password?\nCancel to set no password.\n\nPassword: "), QLineEdit::Password);
-        if (password.isEmpty()) 
-            password = defaultKey;
-        m_q->SqlStatement("PRAGMA key = '"+QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha1).toHex()+"';");
+        if (!password.isEmpty()) 
+            m_q->SqlStatement("PRAGMA key = '"+QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha1).toHex()+"';");
         m_q->SqlStatement("CREATE TABLE notes(title TEXT, content TEXT, tag TEXT, hash TEXT)");
         m_q->SqlStatement("CREATE TABLE notes_attr(rowid INTEGER PRIMARY KEY ASC, created DATETIME)");
         m_q->SqlStatement("CREATE TABLE notes_res(res_name VARCHAR(40), noteid INTEGER, res_type INTEGER, res_data BLOB, CONSTRAINT unique_res_within_a_note UNIQUE (res_name, noteid) )");
         ret = true;
     }
     else {
-        QString password = defaultKey;
+        QString password;
         int retry = 0;
         while(retry < 3) {
             try {
                 retry++;
-                m_q->SqlStatement("PRAGMA key = '"+QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha1).toHex()+"';");
+                if (!password.isEmpty()) 
+                    m_q->SqlStatement("PRAGMA key = '"+QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha1).toHex()+"';");
                 m_q->SqlStatement("select rowid from notes limit 1");
                 ret = true;
                 break;
@@ -394,7 +408,7 @@ SQLiteStatement* MainWindow::getFoundNote(int idx)
             + " order by "
             + sort_by[ui->comboBoxSort->currentIndex()]
             + ((ui->checkBox->checkState() == Qt::Checked)?" asc":" desc")
-            + QString(" limit 1 offset %1").arg(idx);
+            + QString(" limit 1 offset %1").arg(m_page*page_size+idx);
     }
 
     m_q->Sql(sql.toUtf8());
@@ -410,9 +424,6 @@ void MainWindow::loadImageFromDB(const QString& fileName, QByteArray& imgData)
 }
 void MainWindow::loadNotes()
 {
-    ui->noteList->clear();
-    ui->action_Save_Note->setEnabled(false);
-
     QString catString = "1";
     if(!m_catList.empty()) {
         if(m_leftPanel) {
@@ -430,7 +441,7 @@ void MainWindow::loadNotes()
     }
     m_criterion = "";
     if(s_query != "") {
-        m_criterion  = query_like[ui->comboBox->currentIndex()];
+        m_criterion  = query_like[ui->comboBoxMatch->currentIndex()];
         m_criterion  = " where " + m_criterion.replace(QRegExp("KEYWORD"),s_query)+" and "+catString;
     }
     else
@@ -441,9 +452,20 @@ void MainWindow::loadNotes()
         sql = QString("select count(*) from notes %1").arg(m_criterion);
     else
         sql = QString("select count(*) from notes left join notes_attr on notes.rowid=notes_attr.rowid %1").arg(m_criterion);
-    int found = m_q->SqlAggregateFuncResult(sql.toUtf8());
-    ui->statusbar->showMessage(tr("%1 notes found").arg(found));
-    ui->noteList->extend(found);
+    m_found = m_q->SqlAggregateFuncResult(sql.toUtf8());
+    ui->comboBoxPage->m_pageNum = qCeil(m_found/(float)page_size);
+    ui->comboBoxPage->setCurrentIndex(0);
+
+    ui->statusbar->showMessage(tr("%1 notes found").arg(m_found));
+    ui->action_Save_Note->setEnabled(false);
+
+    loadPage();
+}
+void MainWindow::loadPage()
+{
+    ui->noteList->clear();
+    m_page = ui->comboBoxPage->currentIndex();
+    ui->noteList->extend((m_page < ui->comboBoxPage->m_pageNum-1)?page_size:m_found-m_page*page_size);
     ui->noteList->update();
     ui->noteList->adjustSize();
     resizeEvent(0);
@@ -634,7 +656,9 @@ bool MainWindow::delActiveNote()
         sql = QString("delete from notes_res where noteid=%1").arg(row);
         m_q->SqlStatement(sql.toUtf8());
 
-        NoteItem* item = ui->noteList->getNextNote(activeItem);
+        NoteItem* item = ui->noteList->getNextNote(activeItem, 1);
+        if(ret == 0)
+            ret = ui->noteList->getNextNote(activeItem, -1);
         NoteItem::setActiveItem(item);
         ui->noteList->removeNote(activeItem);
 

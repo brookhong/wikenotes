@@ -101,6 +101,7 @@ class MainWindow : public QMainWindow
         bool event(QEvent *event);
 
     private slots:
+        void loadPage();
         void handleSingleMessage(const QString&msg);
         void iconActivated(QSystemTrayIcon::ActivationReason reason);
         void toggleVisibility();
@@ -142,6 +143,8 @@ class MainWindow : public QMainWindow
         QString m_lang;
         //true: tag list; false: monthly list
         bool m_leftPanel;
+        int m_found;
+        int m_page;
 
         QStringListModel *m_tagModel;
         QStringListModel *m_monthModel;

@@ -15,7 +15,7 @@ class NoteList : public QWidget
         void addNote(NoteItem* item);
         void removeNote(NoteItem* item);
         void clear();
-        NoteItem* getNextNote(NoteItem* item);
+        NoteItem* getNextNote(NoteItem* item, int dir);
         void fitSize(int w, int h);
         void setTextNoteFont(const QFont& font);
 
