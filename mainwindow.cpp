@@ -29,7 +29,9 @@ const char* tag_like = "tag like 'KEYWORD' or tag like 'KEYWORD,%' or tag like '
 
 QStringList TagCompleter::splitPath(const QString &path) const
 {
-    QStringList lst = path.split(",");
+    QString p = path;
+    p = p.replace(QString::fromUtf8("，"),",");
+    QStringList lst = p.split(",");
     QString last = lst[lst.size()-1];
     return QStringList(last);
 }
@@ -37,7 +39,9 @@ QString TagCompleter::pathFromIndex(const QModelIndex &index) const
 {
     QString path = QCompleter::pathFromIndex(index);
     QLineEdit *le = qobject_cast<QLineEdit*>(widget());
-    QStringList lst = le->text().split(',');
+    QString tags = le->text();
+    tags = tags.replace(QString::fromUtf8("，"),",");
+    QStringList lst = tags.split(',');
     int len = lst.size();
     if(len > 1) {
         lst[len-1] = path;

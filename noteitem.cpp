@@ -257,6 +257,7 @@ QStringList NoteItem::getTags()
         tag = tag.replace(QRegExp("^\\s+"),"");
         tag = tag.replace(QRegExp("\\s+$"),"");
         tag = tag.replace(QRegExp("\\s*,\\s*"),",");
+        tag = tag.replace(QString::fromUtf8("，"),",");
         tags = tag.split(",");
         tags.sort();
     }
