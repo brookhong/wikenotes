@@ -24,6 +24,21 @@ private:
     QByteArray m_buffer;
     int m_position;
 };
+class UrlBasedRenderer : public QNetworkAccessManager
+{
+public:
+    UrlBasedRenderer(QObject* parent = 0) : QNetworkAccessManager(parent)
+    {
+    }
+
+    virtual QNetworkReply *createRequest(Operation op, const QNetworkRequest &request, QIODevice *outgoingData)
+    {
+        if (request.url().scheme() != "wike")
+            return QNetworkAccessManager::createRequest(op, request, outgoingData);
+        return new RendererReply(this, request);
+    }
+};
+
 class LocalFileDialog : public QObject {
     Q_OBJECT
 public:
@@ -58,7 +73,6 @@ class NoteItem : public QFrame
         QString getTitle();
         QString getContent();
         QStringList getTags();
-        const QMap<QString, QImage>& getAttachedImages();
         void setFont(const QFont& font);
         static NoteItem* getActiveItem();
         static void setActiveItem(NoteItem* item);
@@ -87,11 +101,11 @@ class NoteItem : public QFrame
         QLineEdit *m_tagEdit;
         QPlainTextEdit* m_textEdit;
         QWebView* m_webView;
-        QMap<QString, QImage> m_images;
 
         void active();
         void loadResource();
         void exportFile();
+        static UrlBasedRenderer s_urlBasedRenderer; 
 };
 
 #endif

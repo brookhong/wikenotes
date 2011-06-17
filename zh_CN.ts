@@ -15,8 +15,14 @@
     </message>
     <message>
         <location filename="hotkeysettings.ui" line="78"/>
-        <source>New Plain Text Note:</source>
+        <source>Copy Selected Text to New Note:</source>
+        <oldsource>New Plain Text Note:</oldsource>
         <translation>保存选中文本为笔记:</translation>
+    </message>
+    <message>
+        <location filename="hotkeysettings.ui" line="94"/>
+        <source>Copy Selected HTML to New Note:</source>
+        <translation>保存选中HTML为笔记:</translation>
     </message>
 </context>
 <context>
@@ -247,61 +253,69 @@
         <translation>按月列表</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="148"/>
+        <location filename="mainwindow.cpp" line="161"/>
         <source>&amp;Restore</source>
         <translation>显示主窗口(&amp;R)</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="150"/>
+        <location filename="mainwindow.cpp" line="163"/>
         <source>&amp;Quit</source>
         <translation>退出(&amp;Q)</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="173"/>
+        <location filename="mainwindow.cpp" line="186"/>
         <source>Directory %1 not exists, default notes library will be used.</source>
         <translation>目录%1不存在，将使用默认笔记库。</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="265"/>
+        <location filename="mainwindow.cpp" line="281"/>
+        <location filename="mainwindow.cpp" line="310"/>
+        <location filename="mainwindow.cpp" line="368"/>
         <source>Untagged</source>
         <translation>无标签</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="289"/>
+        <location filename="mainwindow.cpp" line="291"/>
+        <location filename="mainwindow.cpp" line="958"/>
+        <source>Another note is being saved now, please try later.</source>
+        <translation>另一条笔记正在保存，请稍候再试。</translation>
+    </message>
+    <message>
+        <location filename="mainwindow.cpp" line="394"/>
         <source>help</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="302"/>
-        <location filename="mainwindow.cpp" line="332"/>
+        <location filename="mainwindow.cpp" line="407"/>
+        <location filename="mainwindow.cpp" line="437"/>
         <source>Create New Library</source>
         <translation>新建笔记库</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="302"/>
-        <location filename="mainwindow.cpp" line="314"/>
-        <location filename="mainwindow.cpp" line="332"/>
-        <location filename="mainwindow.cpp" line="334"/>
+        <location filename="mainwindow.cpp" line="407"/>
+        <location filename="mainwindow.cpp" line="419"/>
+        <location filename="mainwindow.cpp" line="437"/>
+        <location filename="mainwindow.cpp" line="439"/>
         <source>wike files (*.wike)</source>
         <translation>笔记文件 (*.wike)</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="307"/>
+        <location filename="mainwindow.cpp" line="412"/>
         <source>Failed to create notes library: %1</source>
         <translation>创建笔记库失败: %1</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="318"/>
+        <location filename="mainwindow.cpp" line="423"/>
         <source>Failed to open notes library: %1</source>
         <translation>打开笔记库失败: %1</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="329"/>
+        <location filename="mainwindow.cpp" line="434"/>
         <source>Would you like to create a new Library? No to select another existing Library,  Abort to exit.</source>
         <translation>你是否想新建一个笔记库？否则选择其他笔记库，或者退出。</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="350"/>
+        <location filename="mainwindow.cpp" line="455"/>
         <source>Would you like to protect your notes library with a password?
 Cancel to set no password.
 
@@ -312,60 +326,60 @@ Password: </source>
 密码：</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="371"/>
+        <location filename="mainwindow.cpp" line="476"/>
         <source>Password for %1:</source>
         <translation>%1的密码：</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="314"/>
-        <location filename="mainwindow.cpp" line="334"/>
+        <location filename="mainwindow.cpp" line="419"/>
+        <location filename="mainwindow.cpp" line="439"/>
         <source>Open Notes Library</source>
         <translation>打开笔记库</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="458"/>
+        <location filename="mainwindow.cpp" line="563"/>
         <source>%1 notes found</source>
         <translation>共%1条笔记</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="484"/>
-        <location filename="mainwindow.cpp" line="496"/>
-        <location filename="mainwindow.cpp" line="878"/>
-        <location filename="mainwindow.cpp" line="888"/>
-        <location filename="mainwindow.cpp" line="1106"/>
-        <location filename="mainwindow.cpp" line="1107"/>
+        <location filename="mainwindow.cpp" line="589"/>
+        <location filename="mainwindow.cpp" line="601"/>
+        <location filename="mainwindow.cpp" line="989"/>
+        <location filename="mainwindow.cpp" line="999"/>
+        <location filename="mainwindow.cpp" line="1221"/>
+        <location filename="mainwindow.cpp" line="1222"/>
         <source>All</source>
         <translation>所有</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="756"/>
-        <location filename="mainwindow.cpp" line="796"/>
+        <location filename="mainwindow.cpp" line="854"/>
+        <location filename="mainwindow.cpp" line="894"/>
         <source>There exists a note with the same content, thus I will NOT same this one.</source>
         <translation>已有相同内容的笔记存在，因此不作保存。</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="1048"/>
+        <location filename="mainwindow.cpp" line="1159"/>
         <source>Import Notes</source>
         <translation>导入笔记</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="1048"/>
-        <location filename="mainwindow.cpp" line="1058"/>
+        <location filename="mainwindow.cpp" line="1159"/>
+        <location filename="mainwindow.cpp" line="1169"/>
         <source>xml files (*.xml)</source>
         <translation>xml 文件 (*.xml)</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="1058"/>
+        <location filename="mainwindow.cpp" line="1169"/>
         <source>Export Notes</source>
         <translation>导出笔记</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="1147"/>
+        <location filename="mainwindow.cpp" line="1262"/>
         <source>Version: </source>
         <translation>版本：</translation>
     </message>
     <message>
-        <location filename="noteitem.cpp" line="215"/>
+        <location filename="noteitem.cpp" line="204"/>
         <source>Leave this unchanged to choose title automatically.</source>
         <translation>不改变时自动生成标题。</translation>
     </message>
@@ -373,12 +387,12 @@ Password: </source>
 <context>
     <name>NoteItem</name>
     <message>
-        <location filename="noteitem.cpp" line="142"/>
+        <location filename="noteitem.cpp" line="128"/>
         <source>Untitled</source>
         <translation>无标题</translation>
     </message>
     <message>
-        <location filename="noteitem.cpp" line="142"/>
+        <location filename="noteitem.cpp" line="128"/>
         <source>Untagged</source>
         <translation>无标签</translation>
     </message>
@@ -386,26 +400,26 @@ Password: </source>
 <context>
     <name>NotesImporter</name>
     <message>
-        <location filename="mainwindow.cpp" line="950"/>
+        <location filename="mainwindow.cpp" line="1061"/>
         <source>Untagged</source>
         <translation>无标签</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="975"/>
+        <location filename="mainwindow.cpp" line="1086"/>
         <source>Note already exists in the notes library: %1
 </source>
         <translation>笔记已存在:%1
 </translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="980"/>
+        <location filename="mainwindow.cpp" line="1091"/>
         <source>SQL Error: %1
 </source>
         <translation>SQL 错误: %1
 </translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="983"/>
+        <location filename="mainwindow.cpp" line="1094"/>
         <source>Status of importing notes from %1:
 
 Success:	%2
@@ -418,7 +432,7 @@ Log:	%4.log</source>
 日志：	%4.log</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="993"/>
+        <location filename="mainwindow.cpp" line="1104"/>
         <source>
 Summary of importing notes from %1:
 Success:	%2
@@ -434,7 +448,7 @@ Fail:	%3
 <context>
     <name>PlainTextBrowser</name>
     <message>
-        <location filename="noteitem.cpp" line="83"/>
+        <location filename="noteitem.cpp" line="68"/>
         <source>External Commands</source>
         <translation>外部命令</translation>
     </message>
@@ -442,7 +456,7 @@ Fail:	%3
 <context>
     <name>TextBrowser</name>
     <message>
-        <location filename="noteitem.cpp" line="103"/>
+        <location filename="noteitem.cpp" line="88"/>
         <source>External Commands</source>
         <translation>外部命令</translation>
     </message>

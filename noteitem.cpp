@@ -53,21 +53,6 @@ qint64 RendererReply::size () const
 void RendererReply::abort()
 {
 }
-
-class UrlBasedRenderer : public QNetworkAccessManager
-{
-public:
-    UrlBasedRenderer(QObject* parent = 0) : QNetworkAccessManager(parent)
-    {
-    }
-
-    virtual QNetworkReply *createRequest(Operation op, const QNetworkRequest &request, QIODevice *outgoingData)
-    {
-        if (request.url().scheme() != "wike")
-            return QNetworkAccessManager::createRequest(op, request, outgoingData);
-        return new RendererReply(this, request);
-    }
-};
 QString LocalFileDialog::selectFiles(const QString& filters) {
     QFileDialog fileDialog(static_cast<QWidget*>(parent()));
     fileDialog.setFileMode(QFileDialog::ExistingFiles);
@@ -119,6 +104,7 @@ TextBrowser::~TextBrowser()
     delete m_contextMenu;
 }
 NoteItem* NoteItem::s_activeNote = 0;
+UrlBasedRenderer NoteItem::s_urlBasedRenderer;
 NoteItem::NoteItem(QWidget *parent, int row, bool readOnly, bool rich) :
     QFrame(parent)
 {
@@ -159,6 +145,7 @@ void NoteItem::initControls()
         m_title->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         m_title->setText("<h2>"+Qt::escape(title)+"</h2><table width='100%'><tr><td align='left' width='40%'>"+tag+"</td><td align='center' width='20%'>"+rowId+"</td><td align='right' width='40%'>"+created+"</td></tr></table>");
 
+        m_verticalLayout->addWidget(m_title);
 
         QWidget* contentWidget;
         if(m_rich) {
@@ -170,6 +157,9 @@ void NoteItem::initControls()
                 textBrowser->find(MainWindow::s_query);
 
             contentWidget = textBrowser;
+            contentWidget->setObjectName(QString::fromUtf8("contentWidget"));
+            m_verticalLayout->addWidget(contentWidget);
+            loadResource();
         }
         else {
             PlainTextBrowser* plainTextEdit = new PlainTextBrowser(this);
@@ -180,13 +170,11 @@ void NoteItem::initControls()
                 plainTextEdit->find(MainWindow::s_query);
 
             contentWidget = plainTextEdit;
+            contentWidget->setObjectName(QString::fromUtf8("contentWidget"));
+            m_verticalLayout->addWidget(contentWidget);
         }
-        contentWidget->setObjectName(QString::fromUtf8("contentWidget"));
         contentWidget->setFont(MainWindow::s_font);
         contentWidget->installEventFilter(this);
-
-        m_verticalLayout->addWidget(m_title);
-        m_verticalLayout->addWidget(contentWidget);
     }
     else {
         QFont font;
@@ -202,7 +190,8 @@ void NoteItem::initControls()
 
         if(m_rich) {
             m_webView = new QWebView(this);
-            m_webView->page()->setNetworkAccessManager(new UrlBasedRenderer);
+            m_webView->page()->setNetworkAccessManager(&s_urlBasedRenderer);
+
             QFile file(":/editor.html");
             file.open(QIODevice::ReadOnly);
             QString html = file.readAll();
@@ -228,7 +217,6 @@ void NoteItem::initControls()
 
         m_tagEdit->setCompleter(&(MainWindow::s_tagCompleter));
     }
-    loadResource();
 }
 bool NoteItem::isReadOnly()
 {
@@ -263,34 +251,10 @@ QStringList NoteItem::getTags()
     }
     return tags;
 }
-const QMap<QString, QImage>& NoteItem::getAttachedImages()
-{
-    return m_images;
-}
 QString NoteItem::getContent()
 {
     if(m_rich) {
         QWebFrame* mainFrame = m_webView->page()->mainFrame();
-        QWebFrame* iframe = mainFrame->childFrames()[0];
-        QWebElementCollection col = iframe->findAllElements("img");
-        QString imgName;
-        QRegExp rx("\"wike://([0-9a-f]+)\"");
-        foreach (QWebElement el, col) {
-            imgName = el.attribute("src");
-            if(el.attribute("embed").toLower() != "link" && !rx.exactMatch(imgName)) {
-                QPixmap pix(el.geometry().size());
-                QPainter p(&pix);
-                el.render(&p);
-                QImage image = pix.toImage();
-
-                QByteArray imgBlock((const char *)image.bits(), image.byteCount());
-                QByteArray sha1Sum = QCryptographicHash::hash(imgBlock, QCryptographicHash::Sha1);
-                imgName = sha1Sum.toHex();
-                el.setAttribute("src", "wike://"+imgName);
-                m_images[imgName] = image;
-            }
-        }
-
         m_content = mainFrame->evaluateJavaScript("editor.updateTextArea();editor.$area.val();").toString();
         m_content = m_content.replace(QRegExp("<!--StartFragment-->"),"");
         m_content = m_content.replace(QRegExp("<!--EndFragment-->"),"");
@@ -442,22 +406,16 @@ void NoteItem::autoSize()
 }
 void NoteItem::loadResource()
 {
-    if(m_rich) {
-        m_q->Sql(QString("select res_name,noteid,res_type,res_data from notes_res where noteid=%1").arg(m_noteId).toUtf8());
-        while(m_q->FetchRow()) {
-            QByteArray imgData = QByteArray((char*)m_q->GetColumnBlob(3), m_q->GetColumnBytes(3));
-            QBuffer buffer(&imgData);
-            buffer.open( QIODevice::ReadOnly );
-            QImageReader reader(&buffer, "PNG");
-            QImage image = reader.read();
-            QString fileName = QString::fromUtf8((char*)m_q->GetColumnCString(0));
-            if(m_readOnly) {
-                TextBrowser* textBrowser = findChild<TextBrowser *>("contentWidget");
-                textBrowser->document()->addResource(m_q->GetColumnInt(2), "wike://"+fileName, image);
-            }
-            else
-                m_images[fileName] = image;
-        }
+    m_q->Sql(QString("select res_name,noteid,res_type,res_data from notes_res where noteid=%1").arg(m_noteId).toUtf8());
+    while(m_q->FetchRow()) {
+        QByteArray imgData = QByteArray((char*)m_q->GetColumnBlob(3), m_q->GetColumnBytes(3));
+        QBuffer buffer(&imgData);
+        buffer.open( QIODevice::ReadOnly );
+        QImageReader reader(&buffer, "PNG");
+        QImage image = reader.read();
+        QString fileName = QString::fromUtf8((char*)m_q->GetColumnCString(0));
+        TextBrowser* textBrowser = findChild<TextBrowser *>("contentWidget");
+        textBrowser->document()->addResource(m_q->GetColumnInt(2), "wike://"+fileName, image);
     }
 }
 void NoteItem::setActiveItem(NoteItem* item)

@@ -90,7 +90,6 @@ class MainWindow : public QMainWindow
         static TagCompleter s_tagCompleter;
 
         const QList<QAction*>& getExtActions();
-
     public slots:
         void newDB();
         void loadNotes();
@@ -106,6 +105,7 @@ class MainWindow : public QMainWindow
         void iconActivated(QSystemTrayIcon::ActivationReason reason);
         void toggleVisibility();
         void silentNewTextNote();
+        void silentNewHtmlNote();
         void selectDB();
         void newPlainNote();
         void newHTMLNote();
@@ -128,6 +128,7 @@ class MainWindow : public QMainWindow
         void importDone(int action);
         void extActions();
         void extProcFinished(int exitCode, QProcess::ExitStatus exitStatus);
+        void networkFinished(QNetworkReply* reply);
     private:
         QSystemTrayIcon *m_trayIcon;
         void createTrayIcon();
@@ -137,6 +138,7 @@ class MainWindow : public QMainWindow
         QString m_dbName;
         QxtGlobalShortcut* m_hkToggleMain;
         QxtGlobalShortcut* m_hkNewTextNote;
+        QxtGlobalShortcut* m_hkNewHtmlNote;
         ImportDialog *m_importDialog;
         Ui::MainWindow *ui;
         QTranslator m_translator;
@@ -165,6 +167,14 @@ class MainWindow : public QMainWindow
 
         QList<QAction*> m_extActions;
         QList<QProcess*> m_extProcs;
+
+        QNetworkAccessManager* m_networkManager;
+        QWebPage m_savingPage;
+        QMap<QNetworkReply *, QWebElement> m_pendingImages;
+        QMap<QString, QImage> m_attachedImages;
+        NoteItem* m_pendingNoteItem;
+        bool prepareAttchment(const QString& content);
+        void _saveNote(int noteId, QString title, QString content, QStringList tags, bool rich);
 };
 
 extern MainWindow* g_mainWindow;

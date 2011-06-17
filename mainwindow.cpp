@@ -65,6 +65,10 @@ MainWindow::MainWindow(QWidget *parent) :
     ui(new Ui::MainWindow)
 {
     QNetworkProxyFactory::setUseSystemConfiguration(true);
+    m_pendingNoteItem = NULL;
+    m_networkManager = new QNetworkAccessManager();
+    connect(m_networkManager, SIGNAL(finished(QNetworkReply*)), this, SLOT(networkFinished(QNetworkReply*)));
+
     ui->setupUi(this);
     ui->comboBoxPage->insertItem(0,"1");
     ui->comboBoxPage->setFixedWidth(40);
@@ -77,6 +81,10 @@ MainWindow::MainWindow(QWidget *parent) :
     m_hkNewTextNote = new QxtGlobalShortcut(this);
     connect(m_hkNewTextNote, SIGNAL(activated()), this, SLOT(silentNewTextNote()));
     m_hkNewTextNote->setShortcut(QKeySequence("Ctrl+1"));
+
+    m_hkNewHtmlNote = new QxtGlobalShortcut(this);
+    connect(m_hkNewHtmlNote, SIGNAL(activated()), this, SLOT(silentNewHtmlNote()));
+    m_hkNewHtmlNote->setShortcut(QKeySequence("Ctrl+2"));
 
     m_leftPanel = true;
     connect(ui->action_Tag_List, SIGNAL(triggered()), this, SLOT(changeLeftPanel()));
@@ -190,6 +198,8 @@ void MainWindow::loadSettings()
         m_hkToggleMain->setShortcut(QKeySequence(settings.value("toggle_main_window").toString()));
     if(settings.contains("new_text_note")) 
         m_hkNewTextNote->setShortcut(QKeySequence(settings.value("new_text_note").toString()));
+    if(settings.contains("new_html_note")) 
+        m_hkNewHtmlNote->setShortcut(QKeySequence(settings.value("new_html_note").toString()));
 
     if(settings.contains("language")) 
         m_lang = settings.value("language").toString();
@@ -237,6 +247,7 @@ void MainWindow::flushSettings()
     updateSettings(conf, QString("%1").arg(s_font.pointSize()), "10", "font_size");
     updateSettings(conf, m_hkToggleMain->shortcut().toString(), "Alt+Q", "toggle_main_window");
     updateSettings(conf, m_hkNewTextNote->shortcut().toString(), "Ctrl+1", "new_text_note");
+    updateSettings(conf, m_hkNewHtmlNote->shortcut().toString(), "Ctrl+2", "new_html_note");
     updateSettings(conf, m_lang, QLocale::system().name(), "language");
     updateSettings(conf, m_leftPanel?"true":"false", "true", "taglist");
     updateSettings(conf, QString("%1").arg(ui->comboBoxMatch->currentIndex()), "0", "matched_in");
@@ -273,6 +284,95 @@ void MainWindow::silentNewTextNote()
     QString hashKey = QCryptographicHash::hash(content.toUtf8(), QCryptographicHash::Sha1).toHex();
     if(insertNote(title, content, tag, hashKey, datetime) == 0)
         setCurrentCat(tag);
+}
+void MainWindow::silentNewHtmlNote()
+{
+    if(!m_pendingImages.isEmpty()) {
+        QMessageBox::warning(NULL, "WikeNotes", tr("Another note is being saved now, please try later.")); 
+        return;
+    }
+#ifdef WIN32
+    ::Sleep(300);
+    keybd_event(VK_CONTROL,MapVirtualKey (VK_CONTROL, 0),0,0);
+    keybd_event('C', MapVirtualKey ('C', 0), 0, 0);
+    keybd_event('C', MapVirtualKey ('C', 0), KEYEVENTF_KEYUP, 0);
+    keybd_event(VK_CONTROL,MapVirtualKey (VK_CONTROL, 0),KEYEVENTF_KEYUP,0);
+    ::Sleep(300);
+#endif
+
+    QClipboard *clipboard = QApplication::clipboard();
+    QString title = getTitleFromContent(clipboard->text());
+    QString content = clipboard->mimeData()->html();
+    content = content.replace(QRegExp("<!--StartFragment-->"),"");
+    content = content.replace(QRegExp("<!--EndFragment-->"),"");
+
+    if(!prepareAttchment(content)) {
+        QString tag = tr("Untagged");
+        QString datetime = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
+
+        QString hashKey = QCryptographicHash::hash(content.toUtf8(), QCryptographicHash::Sha1).toHex();
+        insertNote(title, content, tag, hashKey, datetime);
+    }
+}
+bool MainWindow::prepareAttchment(const QString& content)
+{
+    bool ret = false;
+
+    QWebFrame* iframe = m_savingPage.mainFrame();
+    iframe->setHtml(content);
+    QWebElementCollection col = iframe->findAllElements("img");
+
+    if(col.count() > 0) {
+        ret = true;
+        QString imgName;
+        QRegExp rx("\"wike://([0-9a-f]+)\"");
+        foreach (QWebElement el, col) {
+            imgName = el.attribute("src");
+            if(el.attribute("embed").toLower() != "link" && !rx.exactMatch(imgName)) {
+                QNetworkReply *reply = m_networkManager->get(QNetworkRequest(QUrl(imgName)));
+                m_pendingImages[reply] = el;
+            }
+        }
+    }
+    return ret;
+}
+void MainWindow::networkFinished(QNetworkReply* reply)
+{
+    QNetworkReply::NetworkError err = reply->error();
+    if(m_pendingImages.contains(reply)) {
+        QByteArray imgBlock;
+        if(QNetworkReply::NoError == err) 
+            imgBlock = reply->readAll();
+        else
+            imgBlock = "";
+
+        QImage image;
+        image.loadFromData(imgBlock);
+
+        QByteArray sha1Sum = QCryptographicHash::hash(imgBlock, QCryptographicHash::Sha1);
+        QString imgName = sha1Sum.toHex();
+        m_pendingImages[reply].setAttribute("src", "wike://"+imgName);
+        m_pendingImages.remove(reply);
+        reply->deleteLater();
+        m_attachedImages[imgName] = image;
+        if(m_pendingImages.isEmpty()) {
+            QString content = m_savingPage.mainFrame()->findFirstElement("body").toInnerXml();
+            if(m_pendingNoteItem) {
+                _saveNote(m_pendingNoteItem->getNoteId(), m_pendingNoteItem->getTitle(), content, m_pendingNoteItem->getTags(), true);
+                m_pendingNoteItem = NULL;
+            }
+            else {
+                QString title = getTitleFromContent(m_savingPage.mainFrame()->toPlainText());
+
+                QStringList tags;
+                tags << tr("Untagged");
+                QString datetime = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
+
+                QString hashKey = QCryptographicHash::hash(content.toUtf8(), QCryptographicHash::Sha1).toHex();
+                _saveNote(0, title, content, tags, true);
+            }
+        }
+    }
 }
 void MainWindow::handleSingleMessage(const QString&msg)
 {
@@ -730,15 +830,9 @@ void MainWindow::setCurrentCat(const QString& cat) {
         ui->tagView->setCurrentIndex(idx);
     }
 }
-void MainWindow::saveNote()
+void MainWindow::_saveNote(int noteId, QString title, QString content, QStringList tags, bool rich)
 {
-    NoteItem* activeItem = NoteItem::getActiveItem();
-
     QString datetime = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
-    int noteId = activeItem->getNoteId();
-    QString title = activeItem->getTitle();
-    QString content = activeItem->getContent();
-    QStringList tags = activeItem->getTags();
 
     bool ret = false;
     QString hashKey = QCryptographicHash::hash(content.toUtf8(), QCryptographicHash::Sha1).toHex();
@@ -803,7 +897,7 @@ void MainWindow::saveNote()
     }
 
     if(ret) {
-        if(activeItem->isRich()) {
+        if(rich) {
             QStringList res_to_remove;
             QStringList res_to_add;
             QStringList::Iterator it;
@@ -840,10 +934,9 @@ void MainWindow::saveNote()
                 m_q->SqlStatement(sql.toUtf8());
             }
 
-            const QMap<QString, QImage>& imgs = activeItem->getAttachedImages();
             for(it = res_to_add.begin(); it != res_to_add.end(); it++) {
                 imgName = *it;
-                QImage image = imgs[imgName];
+                QImage image = m_attachedImages[imgName];
 
                 QBuffer buffer;
                 QImageWriter writer(&buffer, "PNG");
@@ -851,12 +944,26 @@ void MainWindow::saveNote()
 
                 insertNoteRes(imgName, noteId, (int)QTextDocument::ImageResource, buffer.data());
             }
+            m_attachedImages.clear();
         }
         if(m_leftPanel)
             setCurrentCat(tags[0]);
         else 
             setCurrentCat(datetime.mid(0,7));
     }
+}
+void MainWindow::saveNote()
+{
+    if(!m_pendingImages.isEmpty()) {
+        QMessageBox::warning(this, "WikeNotes", tr("Another note is being saved now, please try later.")); 
+        return;
+    }
+    NoteItem* activeItem = NoteItem::getActiveItem();
+    QString content = activeItem->getContent();
+    if(!prepareAttchment(content)) 
+        _saveNote(activeItem->getNoteId(), activeItem->getTitle(), content, activeItem->getTags(), activeItem->isRich());
+    else
+        m_pendingNoteItem = activeItem;
 }
 void MainWindow::statusMessage(const QString& msg)
 {
@@ -1080,16 +1187,20 @@ void MainWindow::setHotKey()
 {
     QKeySequence tm = m_hkToggleMain->shortcut();
     QKeySequence ntn = m_hkNewTextNote->shortcut();
-    HotkeySettings diag(tm, ntn, this);
+    QKeySequence nhn = m_hkNewHtmlNote->shortcut();
+    HotkeySettings diag(tm, ntn, nhn, this);
     m_hkToggleMain->setShortcut(QKeySequence());
     m_hkNewTextNote->setShortcut(QKeySequence());
+    m_hkNewHtmlNote->setShortcut(QKeySequence());
     if(diag.exec() == QDialog::Accepted) {
         m_hkToggleMain->setShortcut(diag.m_hkTM);
         m_hkNewTextNote->setShortcut(diag.m_hkNTN);
+        m_hkNewHtmlNote->setShortcut(diag.m_hkNHN);
     }
     else {
         m_hkToggleMain->setShortcut(tm);
         m_hkNewTextNote->setShortcut(ntn);
+        m_hkNewHtmlNote->setShortcut(nhn);
     }
 }
 void MainWindow::changeLanguage()

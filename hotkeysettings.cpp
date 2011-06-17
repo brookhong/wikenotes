@@ -1,6 +1,9 @@
 #include "hotkeysettings.h"
 
-HotkeySettings::HotkeySettings(const QKeySequence &hkTM, const QKeySequence &hkNTN, QWidget *parent) : QDialog(parent)
+HotkeySettings::HotkeySettings(const QKeySequence &hkTM,
+        const QKeySequence &hkNTN,
+        const QKeySequence &hkNHN,
+        QWidget *parent) : QDialog(parent)
 {
     ui.setupUi(this);
 
@@ -11,6 +14,10 @@ HotkeySettings::HotkeySettings(const QKeySequence &hkTM, const QKeySequence &hkN
     m_hkNTN = hkNTN;
     ui.leNewTextNote->setText(hkNTN.toString());
     ui.leNewTextNote->installEventFilter(this);
+
+    m_hkNHN = hkNHN;
+    ui.leNewHtmlNote->setText(hkNHN.toString());
+    ui.leNewHtmlNote->installEventFilter(this);
 }
 bool HotkeySettings::eventFilter(QObject *obj, QEvent *ev)
 {
@@ -39,11 +46,10 @@ bool HotkeySettings::eventFilter(QObject *obj, QEvent *ev)
                 m_hkTM = QKeySequence(modseq);
             else if(sdr == ui.leNewTextNote)
                 m_hkNTN = QKeySequence(modseq);
+            else if(sdr == ui.leNewHtmlNote)
+                m_hkNHN = QKeySequence(modseq);
         }
         return true;
     }
     return false;
-}
-HotkeySettings::~HotkeySettings()
-{
 }
