@@ -173,6 +173,7 @@ class MainWindow : public QMainWindow
         QMap<QNetworkReply *, QWebElement> m_pendingImages;
         QMap<QString, QImage> m_attachedImages;
         NoteItem* m_pendingNoteItem;
+        QString m_pendingTitle;
         bool prepareAttchment(const QString& content);
         void _saveNote(int noteId, QString title, QString content, QStringList tags, bool rich);
 };

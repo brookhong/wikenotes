@@ -275,9 +275,23 @@ void MainWindow::silentNewTextNote()
     ::Sleep(300);
 #endif
 
-    QClipboard *clipboard = QApplication::clipboard();
-    QString content = clipboard->text();
+    QString content = QApplication::clipboard()->text();
     QString title = getTitleFromContent(content);
+#ifdef WIN32
+    ::Sleep(300);
+    keybd_event(VK_F6, 0, 0, 0);
+    keybd_event(VK_F6, 0, KEYEVENTF_KEYUP, 0);
+    ::Sleep(300);
+    keybd_event(VK_CONTROL,MapVirtualKey (VK_CONTROL, 0),0,0);
+    keybd_event('C', MapVirtualKey ('C', 0), 0, 0);
+    keybd_event('C', MapVirtualKey ('C', 0), KEYEVENTF_KEYUP, 0);
+    keybd_event(VK_CONTROL,MapVirtualKey (VK_CONTROL, 0),KEYEVENTF_KEYUP,0);
+    ::Sleep(300);
+    keybd_event(VK_F6, 0, 0, 0);
+    keybd_event(VK_F6, 0, KEYEVENTF_KEYUP, 0);
+#endif
+    content = QApplication::clipboard()->text()+"\n"+content;
+
     _saveNote(0, title, content, QStringList(tr("Untagged")), false);
 }
 void MainWindow::silentNewHtmlNote()
@@ -296,13 +310,28 @@ void MainWindow::silentNewHtmlNote()
 #endif
 
     QClipboard *clipboard = QApplication::clipboard();
-    QString title = getTitleFromContent(clipboard->text());
+    m_pendingTitle = getTitleFromContent(clipboard->text());
     QString content = clipboard->mimeData()->html();
     content = content.replace(QRegExp("<!--StartFragment-->"),"");
     content = content.replace(QRegExp("<!--EndFragment-->"),"");
 
+#ifdef WIN32
+    ::Sleep(300);
+    keybd_event(VK_F6, 0, 0, 0);
+    keybd_event(VK_F6, 0, KEYEVENTF_KEYUP, 0);
+    ::Sleep(300);
+    keybd_event(VK_CONTROL,MapVirtualKey (VK_CONTROL, 0),0,0);
+    keybd_event('C', MapVirtualKey ('C', 0), 0, 0);
+    keybd_event('C', MapVirtualKey ('C', 0), KEYEVENTF_KEYUP, 0);
+    keybd_event(VK_CONTROL,MapVirtualKey (VK_CONTROL, 0),KEYEVENTF_KEYUP,0);
+    ::Sleep(300);
+    keybd_event(VK_F6, 0, 0, 0);
+    keybd_event(VK_F6, 0, KEYEVENTF_KEYUP, 0);
+#endif
+    content = "<a href='"+QApplication::clipboard()->text()+"'>"+QApplication::clipboard()->text()+"</a><br>"+content;
+
     if(!prepareAttchment(content))
-        _saveNote(0, title, content, QStringList(tr("Untagged")), true);
+        _saveNote(0, m_pendingTitle, content, QStringList(tr("Untagged")), true);
 }
 bool MainWindow::prepareAttchment(const QString& content)
 {
@@ -351,10 +380,8 @@ void MainWindow::networkFinished(QNetworkReply* reply)
                 _saveNote(m_pendingNoteItem->getNoteId(), m_pendingNoteItem->getTitle(), content, m_pendingNoteItem->getTags(), true);
                 m_pendingNoteItem = NULL;
             }
-            else {
-                QString title = getTitleFromContent(m_savingPage.mainFrame()->toPlainText());
-                _saveNote(0, title, content, QStringList(tr("Untagged")), true);
-            }
+            else 
+                _saveNote(0, m_pendingTitle, content, QStringList(tr("Untagged")), true);
         }
     }
 }
