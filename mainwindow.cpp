@@ -278,12 +278,7 @@ void MainWindow::silentNewTextNote()
     QClipboard *clipboard = QApplication::clipboard();
     QString content = clipboard->text();
     QString title = getTitleFromContent(content);
-    QString tag = tr("Untagged");
-    QString datetime = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
-
-    QString hashKey = QCryptographicHash::hash(content.toUtf8(), QCryptographicHash::Sha1).toHex();
-    if(insertNote(title, content, tag, hashKey, datetime) == 0)
-        setCurrentCat(tag);
+    _saveNote(0, title, content, QStringList(tr("Untagged")), false);
 }
 void MainWindow::silentNewHtmlNote()
 {
@@ -306,13 +301,8 @@ void MainWindow::silentNewHtmlNote()
     content = content.replace(QRegExp("<!--StartFragment-->"),"");
     content = content.replace(QRegExp("<!--EndFragment-->"),"");
 
-    if(!prepareAttchment(content)) {
-        QString tag = tr("Untagged");
-        QString datetime = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
-
-        QString hashKey = QCryptographicHash::hash(content.toUtf8(), QCryptographicHash::Sha1).toHex();
-        insertNote(title, content, tag, hashKey, datetime);
-    }
+    if(!prepareAttchment(content))
+        _saveNote(0, title, content, QStringList(tr("Untagged")), true);
 }
 bool MainWindow::prepareAttchment(const QString& content)
 {
@@ -363,13 +353,7 @@ void MainWindow::networkFinished(QNetworkReply* reply)
             }
             else {
                 QString title = getTitleFromContent(m_savingPage.mainFrame()->toPlainText());
-
-                QStringList tags;
-                tags << tr("Untagged");
-                QString datetime = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
-
-                QString hashKey = QCryptographicHash::hash(content.toUtf8(), QCryptographicHash::Sha1).toHex();
-                _saveNote(0, title, content, tags, true);
+                _saveNote(0, title, content, QStringList(tr("Untagged")), true);
             }
         }
     }
@@ -646,10 +630,12 @@ int MainWindow::insertNote(QString& title, QString& content, QString& tag, QStri
 QString MainWindow::getTitleFromContent(const QString& content)
 {
     QString title;
-    if(content.length() > 30)
-        title = content.mid(0,28)+"...";
+    QString temp = content.simplified();
+    if(temp.length() > 30) {
+        title = temp.mid(0,28)+"...";
+    }
     else
-        title = content;
+        title = temp;
     return title;
 }
 bool MainWindow::insertNoteRes(QString& res_name, int noteId, int res_type, const QByteArray& res_data)
@@ -960,10 +946,11 @@ void MainWindow::saveNote()
     }
     NoteItem* activeItem = NoteItem::getActiveItem();
     QString content = activeItem->getContent();
-    if(!prepareAttchment(content)) 
-        _saveNote(activeItem->getNoteId(), activeItem->getTitle(), content, activeItem->getTags(), activeItem->isRich());
-    else
+    bool rich = activeItem->isRich();
+    if(rich && prepareAttchment(content))
         m_pendingNoteItem = activeItem;
+    else
+        _saveNote(activeItem->getNoteId(), activeItem->getTitle(), content, activeItem->getTags(), rich);
 }
 void MainWindow::statusMessage(const QString& msg)
 {

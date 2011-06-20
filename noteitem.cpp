@@ -232,7 +232,21 @@ int NoteItem::getNoteId() const
 }
 QString NoteItem::getTitle()
 {
-    return (m_readOnly)?m_title->text():m_titleEdit->text();
+    if(m_readOnly)
+        return m_title->text();
+    else {
+        QString title = m_titleEdit->text();
+        if(title == "" || title == tr("Untitled")) {
+            if(m_rich) {
+                QWebFrame* mainFrame = m_webView->page()->mainFrame();
+                QWebFrame* iframe = mainFrame->childFrames()[0];
+                title = MainWindow::getTitleFromContent(iframe->toPlainText());
+            }
+            else
+                title = MainWindow::getTitleFromContent(m_textEdit->toPlainText());
+        }
+        return title;
+    }
 }
 QStringList NoteItem::getTags()
 {
