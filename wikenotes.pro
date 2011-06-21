@@ -6,7 +6,7 @@
 
 QT       += core gui webkit network
 
-VERSION = 0.4
+VERSION = 0.5
 # Define the preprocessor macro to get the application version in our application.
 DEFINES += APP_VERSION=\\\"$$VERSION\\\"
 
@@ -48,6 +48,11 @@ win32 {
     SOURCES += qxt/qxtglobalshortcut_win.cpp
     RC_FILE = resources/wike.rc
     LIBS += D:/works/openssl-0.9.8k_WIN32/lib/libeay32.lib -luser32
+}
+CONFIG(debug, debug|release) {
+    QMAKE_CXXFLAGS += -fprofile-arcs -ftest-coverage
+    QMAKE_LDFLAGS += -fprofile-arcs -ftest-coverage
+    LIBS += -lgcov
 }
 
 TRANSLATIONS = zh_CN.ts

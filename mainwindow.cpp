@@ -66,6 +66,7 @@ MainWindow::MainWindow(QWidget *parent) :
 {
     QNetworkProxyFactory::setUseSystemConfiguration(true);
     m_pendingNoteItem = NULL;
+    m_savingNewHtmlNote = false;
     m_networkManager = new QNetworkAccessManager();
     connect(m_networkManager, SIGNAL(finished(QNetworkReply*)), this, SLOT(networkFinished(QNetworkReply*)));
 
@@ -296,10 +297,11 @@ void MainWindow::silentNewTextNote()
 }
 void MainWindow::silentNewHtmlNote()
 {
-    if(!m_pendingImages.isEmpty()) {
+    if(m_savingNewHtmlNote) {
         QMessageBox::warning(NULL, "WikeNotes", tr("Another note is being saved now, please try later.")); 
         return;
     }
+    m_savingNewHtmlNote = true;
 #ifdef WIN32
     ::Sleep(300);
     keybd_event(VK_CONTROL,MapVirtualKey (VK_CONTROL, 0),0,0);
@@ -330,21 +332,20 @@ void MainWindow::silentNewHtmlNote()
 #endif
     content = "<a href='"+QApplication::clipboard()->text()+"'>"+QApplication::clipboard()->text()+"</a><br>"+content;
 
-    if(!prepareAttchment(content))
+    if(!prepareAttchment(content)){
         _saveNote(0, m_pendingTitle, content, QStringList(tr("Untagged")), true);
+        m_savingNewHtmlNote = false;
+    }
 }
 bool MainWindow::prepareAttchment(const QString& content)
 {
-    bool ret = false;
-
     QWebFrame* iframe = m_savingPage.mainFrame();
     iframe->setHtml(content);
     QWebElementCollection col = iframe->findAllElements("img");
 
     if(col.count() > 0) {
-        ret = true;
         QString imgName;
-        QRegExp rx("\"wike://([0-9a-f]+)\"");
+        QRegExp rx("^wike://[0-9a-f]+$");
         foreach (QWebElement el, col) {
             imgName = el.attribute("src");
             if(el.attribute("embed").toLower() != "link" && !rx.exactMatch(imgName)) {
@@ -353,7 +354,7 @@ bool MainWindow::prepareAttchment(const QString& content)
             }
         }
     }
-    return ret;
+    return !m_pendingImages.isEmpty();
 }
 void MainWindow::networkFinished(QNetworkReply* reply)
 {
@@ -382,6 +383,8 @@ void MainWindow::networkFinished(QNetworkReply* reply)
             }
             else 
                 _saveNote(0, m_pendingTitle, content, QStringList(tr("Untagged")), true);
+
+            m_savingNewHtmlNote = false;
         }
     }
 }
@@ -967,7 +970,7 @@ void MainWindow::_saveNote(int noteId, QString title, QString content, QStringLi
 }
 void MainWindow::saveNote()
 {
-    if(!m_pendingImages.isEmpty()) {
+    if(m_savingNewHtmlNote) {
         QMessageBox::warning(this, "WikeNotes", tr("Another note is being saved now, please try later.")); 
         return;
     }
@@ -976,8 +979,10 @@ void MainWindow::saveNote()
     bool rich = activeItem->isRich();
     if(rich && prepareAttchment(content))
         m_pendingNoteItem = activeItem;
-    else
+    else {
         _saveNote(activeItem->getNoteId(), activeItem->getTitle(), content, activeItem->getTags(), rich);
+        m_savingNewHtmlNote = false;
+    }
 }
 void MainWindow::statusMessage(const QString& msg)
 {
