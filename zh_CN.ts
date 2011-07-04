@@ -2,6 +2,44 @@
 <!DOCTYPE TS>
 <TS version="2.0" language="zh_CN">
 <context>
+    <name>AccountSettings</name>
+    <message>
+        <location filename="accountsettings.ui" line="14"/>
+        <source>Account Settings</source>
+        <translation>账号设置</translation>
+    </message>
+    <message>
+        <location filename="accountsettings.ui" line="42"/>
+        <source>User Name:</source>
+        <translation>用户名：</translation>
+    </message>
+    <message>
+        <location filename="accountsettings.ui" line="55"/>
+        <source>Password:</source>
+        <translation>密码：</translation>
+    </message>
+    <message>
+        <location filename="accountsettings.ui" line="84"/>
+        <source>Sync Mode:</source>
+        <translation>同步模式：</translation>
+    </message>
+    <message>
+        <location filename="accountsettings.ui" line="98"/>
+        <source>Manual</source>
+        <translation>手动</translation>
+    </message>
+    <message>
+        <location filename="accountsettings.ui" line="103"/>
+        <source>Auto</source>
+        <translation>自动</translation>
+    </message>
+    <message>
+        <location filename="accountsettings.ui" line="127"/>
+        <source>&lt;a href=&quot;http://wikenotes.com/index.php/user/register&quot;&gt;New Account&lt;/a&gt;</source>
+        <translation>&lt;a href=&quot;http://wikenotes.com/index.php/user/register&quot;&gt;注册用户&lt;/a&gt;</translation>
+    </message>
+</context>
+<context>
     <name>HotkeySettings</name>
     <message>
         <location filename="hotkeysettings.ui" line="14"/>
@@ -68,47 +106,47 @@
         <translation>仅限标签</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="153"/>
+        <location filename="mainwindow.ui" line="152"/>
         <source>&amp;File</source>
         <translation>文件(&amp;F)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="171"/>
+        <location filename="mainwindow.ui" line="174"/>
         <source>&amp;Options</source>
         <translation>选项(&amp;O)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="175"/>
+        <location filename="mainwindow.ui" line="178"/>
         <source>&amp;Language</source>
         <translation>语言(&amp;L)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="192"/>
+        <location filename="mainwindow.ui" line="195"/>
         <source>&amp;Help</source>
         <translation>帮助(&amp;H)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="204"/>
+        <location filename="mainwindow.ui" line="207"/>
         <source>toolBar</source>
         <translation>工具栏</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="235"/>
+        <location filename="mainwindow.ui" line="238"/>
         <source>E&amp;xit</source>
         <translation>退出(&amp;X)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="371"/>
+        <location filename="mainwindow.ui" line="374"/>
         <source>&amp;New Plain Text Note</source>
         <translation>新建文本笔记(&amp;N)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="374"/>
+        <location filename="mainwindow.ui" line="377"/>
         <source>Ctrl+N</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="261"/>
+        <location filename="mainwindow.ui" line="264"/>
         <source>&amp;Edit Selected Note</source>
         <translation>编辑选中笔记(&amp;E)</translation>
     </message>
@@ -148,174 +186,182 @@
         <translation>页</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="180"/>
+        <location filename="mainwindow.ui" line="183"/>
         <source>Left &amp;Panel</source>
         <translation>左面板显示(&amp;P)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="245"/>
+        <location filename="mainwindow.ui" line="248"/>
         <source>New &amp;HTML Note</source>
         <translation>新建HTML笔记(&amp;H)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="248"/>
+        <location filename="mainwindow.ui" line="251"/>
         <source>Ctrl+H</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="264"/>
+        <location filename="mainwindow.ui" line="267"/>
         <source>Ctrl+E</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="269"/>
+        <location filename="mainwindow.ui" line="272"/>
         <source>&amp;Import Notes</source>
         <translation>导入笔记(&amp;I)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="274"/>
+        <location filename="mainwindow.ui" line="277"/>
         <source>Text Note &amp;Font</source>
         <translation>文本笔记字体(&amp;F)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="287"/>
+        <location filename="mainwindow.ui" line="290"/>
         <source>&amp;Delete Selected Note</source>
         <translation>删除选中笔记(&amp;D)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="290"/>
+        <location filename="mainwindow.ui" line="293"/>
         <source>Del</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="303"/>
+        <location filename="mainwindow.ui" line="306"/>
         <source>&amp;Save Note</source>
         <translation>保存笔记(&amp;S)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="306"/>
+        <location filename="mainwindow.ui" line="309"/>
         <source>Ctrl+S</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="311"/>
+        <location filename="mainwindow.ui" line="314"/>
         <source>&amp;Export Notes</source>
         <translation>导出笔记(&amp;E)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="316"/>
+        <location filename="mainwindow.ui" line="319"/>
         <source>&amp;Hotkey Settings</source>
         <translation>热键设置（&amp;H)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="326"/>
+        <location filename="mainwindow.ui" line="329"/>
         <source>&amp;About</source>
         <translation>关于(&amp;A)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="336"/>
+        <location filename="mainwindow.ui" line="339"/>
         <source>Usage</source>
         <translation>用法</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="346"/>
+        <location filename="mainwindow.ui" line="349"/>
         <source>&amp;Open Notes Library</source>
         <translation>打开笔记库(&amp;O)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="349"/>
+        <location filename="mainwindow.ui" line="352"/>
         <source>Ctrl+O</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="354"/>
+        <location filename="mainwindow.ui" line="357"/>
         <source>New &amp;Library</source>
         <translation>新建笔记库(&amp;L)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="359"/>
+        <location filename="mainwindow.ui" line="362"/>
         <source>focusSearchBox</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="362"/>
+        <location filename="mainwindow.ui" line="365"/>
         <source>Ctrl+F</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="379"/>
+        <location filename="mainwindow.ui" line="382"/>
         <source>&amp;Tag List</source>
         <translation>标签列表(&amp;T)</translation>
     </message>
     <message>
-        <location filename="mainwindow.ui" line="384"/>
+        <location filename="mainwindow.ui" line="387"/>
         <source>Monthly List</source>
         <translation>按月列表</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="161"/>
+        <location filename="mainwindow.ui" line="395"/>
+        <source>&amp;Sync Notes</source>
+        <translation>同步笔记(&amp;S)</translation>
+    </message>
+    <message>
+        <location filename="mainwindow.ui" line="403"/>
+        <source>&amp;Logon to Server</source>
+        <translation>登录服务器(&amp;L)</translation>
+    </message>
+    <message>
+        <location filename="mainwindow.ui" line="411"/>
+        <source>log&amp;Off from Server</source>
+        <translation>登出服务器(&amp;O)</translation>
+    </message>
+    <message>
+        <location filename="mainwindow.cpp" line="176"/>
         <source>&amp;Restore</source>
         <translation>显示主窗口(&amp;R)</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="163"/>
+        <location filename="mainwindow.cpp" line="178"/>
         <source>&amp;Quit</source>
         <translation>退出(&amp;Q)</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="186"/>
+        <location filename="mainwindow.cpp" line="201"/>
         <source>Directory %1 not exists, default notes library will be used.</source>
         <translation>目录%1不存在，将使用默认笔记库。</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="281"/>
-        <location filename="mainwindow.cpp" line="310"/>
-        <location filename="mainwindow.cpp" line="368"/>
+        <location filename="mainwindow.cpp" line="338"/>
+        <location filename="mainwindow.cpp" line="372"/>
         <source>Untagged</source>
         <translation>无标签</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="291"/>
-        <location filename="mainwindow.cpp" line="958"/>
-        <source>Another note is being saved now, please try later.</source>
-        <translation>另一条笔记正在保存，请稍候再试。</translation>
-    </message>
-    <message>
-        <location filename="mainwindow.cpp" line="394"/>
+        <location filename="mainwindow.cpp" line="535"/>
         <source>help</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="407"/>
-        <location filename="mainwindow.cpp" line="437"/>
+        <location filename="mainwindow.cpp" line="548"/>
+        <location filename="mainwindow.cpp" line="578"/>
         <source>Create New Library</source>
         <translation>新建笔记库</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="407"/>
-        <location filename="mainwindow.cpp" line="419"/>
-        <location filename="mainwindow.cpp" line="437"/>
-        <location filename="mainwindow.cpp" line="439"/>
+        <location filename="mainwindow.cpp" line="548"/>
+        <location filename="mainwindow.cpp" line="560"/>
+        <location filename="mainwindow.cpp" line="578"/>
+        <location filename="mainwindow.cpp" line="580"/>
         <source>wike files (*.wike)</source>
         <translation>笔记文件 (*.wike)</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="412"/>
+        <location filename="mainwindow.cpp" line="553"/>
         <source>Failed to create notes library: %1</source>
         <translation>创建笔记库失败: %1</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="423"/>
+        <location filename="mainwindow.cpp" line="564"/>
         <source>Failed to open notes library: %1</source>
         <translation>打开笔记库失败: %1</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="434"/>
+        <location filename="mainwindow.cpp" line="575"/>
         <source>Would you like to create a new Library? No to select another existing Library,  Abort to exit.</source>
         <translation>你是否想新建一个笔记库？否则选择其他笔记库，或者退出。</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="455"/>
+        <location filename="mainwindow.cpp" line="596"/>
         <source>Would you like to protect your notes library with a password?
 Cancel to set no password.
 
@@ -326,60 +372,70 @@ Password: </source>
 密码：</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="476"/>
+        <location filename="mainwindow.cpp" line="616"/>
         <source>Password for %1:</source>
         <translation>%1的密码：</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="419"/>
-        <location filename="mainwindow.cpp" line="439"/>
+        <location filename="mainwindow.cpp" line="560"/>
+        <location filename="mainwindow.cpp" line="580"/>
         <source>Open Notes Library</source>
         <translation>打开笔记库</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="563"/>
+        <location filename="mainwindow.cpp" line="489"/>
+        <source>Failed to login.</source>
+        <translation>登录失败。</translation>
+    </message>
+    <message>
+        <location filename="mainwindow.cpp" line="713"/>
         <source>%1 notes found</source>
         <translation>共%1条笔记</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="589"/>
-        <location filename="mainwindow.cpp" line="601"/>
-        <location filename="mainwindow.cpp" line="989"/>
-        <location filename="mainwindow.cpp" line="999"/>
-        <location filename="mainwindow.cpp" line="1221"/>
-        <location filename="mainwindow.cpp" line="1222"/>
+        <location filename="mainwindow.cpp" line="739"/>
+        <location filename="mainwindow.cpp" line="751"/>
+        <location filename="mainwindow.cpp" line="1180"/>
+        <location filename="mainwindow.cpp" line="1190"/>
+        <location filename="mainwindow.cpp" line="1588"/>
+        <location filename="mainwindow.cpp" line="1589"/>
         <source>All</source>
         <translation>所有</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="854"/>
-        <location filename="mainwindow.cpp" line="894"/>
+        <location filename="mainwindow.cpp" line="806"/>
+        <source>Untitled</source>
+        <translation>无标题</translation>
+    </message>
+    <message>
+        <location filename="mainwindow.cpp" line="1049"/>
+        <location filename="mainwindow.cpp" line="1088"/>
         <source>There exists a note with the same content, thus I will NOT same this one.</source>
         <translation>已有相同内容的笔记存在，因此不作保存。</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="1159"/>
+        <location filename="mainwindow.cpp" line="1373"/>
         <source>Import Notes</source>
         <translation>导入笔记</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="1159"/>
-        <location filename="mainwindow.cpp" line="1169"/>
+        <location filename="mainwindow.cpp" line="1373"/>
+        <location filename="mainwindow.cpp" line="1383"/>
         <source>xml files (*.xml)</source>
         <translation>xml 文件 (*.xml)</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="1169"/>
+        <location filename="mainwindow.cpp" line="1383"/>
         <source>Export Notes</source>
         <translation>导出笔记</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="1262"/>
+        <location filename="mainwindow.cpp" line="1629"/>
         <source>Version: </source>
         <translation>版本：</translation>
     </message>
     <message>
-        <location filename="noteitem.cpp" line="204"/>
+        <location filename="noteitem.cpp" line="208"/>
         <source>Leave this unchanged to choose title automatically.</source>
         <translation>不改变时自动生成标题。</translation>
     </message>
@@ -387,12 +443,13 @@ Password: </source>
 <context>
     <name>NoteItem</name>
     <message>
-        <location filename="noteitem.cpp" line="128"/>
+        <location filename="noteitem.cpp" line="130"/>
+        <location filename="noteitem.cpp" line="251"/>
         <source>Untitled</source>
         <translation>无标题</translation>
     </message>
     <message>
-        <location filename="noteitem.cpp" line="128"/>
+        <location filename="noteitem.cpp" line="130"/>
         <source>Untagged</source>
         <translation>无标签</translation>
     </message>
@@ -400,26 +457,26 @@ Password: </source>
 <context>
     <name>NotesImporter</name>
     <message>
-        <location filename="mainwindow.cpp" line="1061"/>
+        <location filename="mainwindow.cpp" line="1264"/>
         <source>Untagged</source>
         <translation>无标签</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="1086"/>
+        <location filename="mainwindow.cpp" line="1289"/>
         <source>Note already exists in the notes library: %1
 </source>
         <translation>笔记已存在:%1
 </translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="1091"/>
+        <location filename="mainwindow.cpp" line="1294"/>
         <source>SQL Error: %1
 </source>
         <translation>SQL 错误: %1
 </translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="1094"/>
+        <location filename="mainwindow.cpp" line="1297"/>
         <source>Status of importing notes from %1:
 
 Success:	%2
@@ -432,7 +489,7 @@ Log:	%4.log</source>
 日志：	%4.log</translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="1104"/>
+        <location filename="mainwindow.cpp" line="1307"/>
         <source>
 Summary of importing notes from %1:
 Success:	%2

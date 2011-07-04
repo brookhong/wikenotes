@@ -28,7 +28,8 @@ SOURCES += main.cpp\
     sqlite/src/KompexSQLiteDatabase.cpp \
     sqlite/src/KompexSQLiteStatement.cpp \
     hotkeysettings.cpp \
-    noteitem.cpp
+    noteitem.cpp \
+    accountsettings.cpp
 
 HEADERS  += mainwindow.h \
     notelist.h \
@@ -37,10 +38,12 @@ HEADERS  += mainwindow.h \
     qtsingleapplication/qtsingleapplication.h \
     qtsingleapplication/qtlocalpeer.h \
     hotkeysettings.h \
-    noteitem.h
+    noteitem.h \
+    accountsettings.h
 
 FORMS    += mainwindow.ui \
-    hotkeysettings.ui
+    hotkeysettings.ui \
+    accountsettings.ui
 
 RESOURCES += resources/wike.qrc
 

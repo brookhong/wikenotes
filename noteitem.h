@@ -70,6 +70,8 @@ class NoteItem : public QFrame
     public:
         NoteItem(QWidget *parent = 0, int row = 0, bool readOnly = true, bool rich = true);
         int getNoteId() const;
+        int getGID() const;
+        int getStatus() const;
         QString getTitle();
         QString getContent();
         QStringList getTags();
@@ -88,6 +90,8 @@ class NoteItem : public QFrame
         static NoteItem* s_activeNote;
         SQLiteStatement* m_q;
         int m_noteId;
+        int m_gid;
+        int m_status;
         bool m_readOnly;
         bool m_rich;
         bool m_sized;

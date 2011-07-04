@@ -1,25 +1,31 @@
 #include "mainwindow.h"
+#include "openssl/aes.h"
 #include "pagelist.h"
+#include "accountsettings.h"
 #include "hotkeysettings.h"
 #include "ui_mainwindow.h"
 #ifdef WIN32
 #include <windows.h>
 #endif
-
+#ifndef NDEBUG
+const QString C_ServerAddr = "localhost";
+#else
+const QString C_ServerAddr = "wikenotes.com";
+#endif
 QString MainWindow::s_query;
 QFont MainWindow::s_font("Tahoma", 10);
 QFontMetrics MainWindow::s_fontMetrics(MainWindow::s_font);
 TagCompleter MainWindow::s_tagCompleter;
 const int page_size = 20;
 const char* query_like[] = {
-    "(content like '%KEYWORD%' or title like '%KEYWORD%' or tag like '%KEYWORD%')",
-    "(content like '%KEYWORD%' or title like '%KEYWORD%')",
-    "(content like '%KEYWORD%')",
-    "(title like '%KEYWORD%')",
-    "(tag like '%KEYWORD%')",
+    "(content like '%KEYWORD%' escape '\\' or title like '%KEYWORD%' escape '\\' or tag like '%KEYWORD%' escape '\\')",
+    "(content like '%KEYWORD%' escape '\\' or title like '%KEYWORD%' escape '\\')",
+    "(content like '%KEYWORD%' escape '\\')",
+    "(title like '%KEYWORD%' escape '\\')",
+    "(tag like '%KEYWORD%' escape '\\')",
 };
 const char* sort_by[] = {
-    "created",
+    "create_time",
     "title",
     "tag",
     "length(content)",
@@ -62,11 +68,10 @@ void PageList::focusInEvent(QFocusEvent * e)
 //QFile g_log;
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
-    ui(new Ui::MainWindow)
+    ui(new Ui::MainWindow),
+    m_syncLog(QCoreApplication::applicationDirPath()+"/wikenotes.sync.log")
 {
     QNetworkProxyFactory::setUseSystemConfiguration(true);
-    m_pendingNoteItem = NULL;
-    m_savingNewHtmlNote = false;
     m_networkManager = new QNetworkAccessManager();
     connect(m_networkManager, SIGNAL(finished(QNetworkReply*)), this, SLOT(networkFinished(QNetworkReply*)));
 
@@ -91,6 +96,13 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->action_Tag_List, SIGNAL(triggered()), this, SLOT(changeLeftPanel()));
     connect(ui->actionMonthly_List, SIGNAL(triggered()), this, SLOT(changeLeftPanel()));
 
+    m_uid = 0;
+    m_user = "";
+    m_pass = "";
+    m_syncMode = 0;
+    m_syncTimer = 0;
+
+    m_syncLog.open(QIODevice::WriteOnly | QIODevice::Append);
     loadSettings();
 
     QAction *action_English = new QAction(this);
@@ -116,7 +128,6 @@ MainWindow::MainWindow(QWidget *parent) :
     rightSizes<<160<<480;
     ui->vsplitter->setSizes(rightSizes);
 
-
     ui->searchBox->setStyleSheet("#searchBox {padding: 0 18px;background:url(:/search.png) no-repeat}");
     connect(ui->searchBox, SIGNAL(textChanged(const QString&)), this, SLOT(instantSearch(const QString&)));
     connect(ui->comboBoxMatch, SIGNAL(currentIndexChanged(int)), this, SLOT(loadNotes()));
@@ -137,6 +148,9 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->action_Delete_Selected_Note, SIGNAL(triggered()), this, SLOT(delActiveNote()));
     connect(ui->action_Import, SIGNAL(triggered()), this, SLOT(importNotes()));
     connect(ui->action_Export_Notes, SIGNAL(triggered()), this, SLOT(exportNotes()));
+    connect(ui->action_Publish_Notes, SIGNAL(triggered()), this, SLOT(syncNotes()));
+    connect(ui->action_Logon_Server, SIGNAL(triggered()), this, SLOT(accountSettings()));
+    connect(ui->actionLog_Off, SIGNAL(triggered()), this, SLOT(requestLogoff()));
     connect(ui->actionText_Note_Font, SIGNAL(triggered()), this, SLOT(setNoteFont()));
     connect(ui->action_Hotkey_Settings, SIGNAL(triggered()), this, SLOT(setHotKey()));
     connect(ui->actionUsage, SIGNAL(triggered()), this, SLOT(usage()));
@@ -231,6 +245,19 @@ void MainWindow::loadSettings()
     action->setShortcut(QKeySequence("Alt+B"));
     connect(action, SIGNAL(triggered()), this, SLOT(extActions()));
     m_extActions.append(action);
+
+    if(settings.contains("user")) 
+        m_user = settings.value("user").toString();
+    if(settings.contains("sync_mode")) 
+        m_syncMode = settings.value("sync_mode").toUInt();
+    if(settings.contains("pass")) {
+        QByteArray safePass = QByteArray::fromBase64(settings.value("pass").toByteArray());
+        unsigned char cipher1[64]={0};
+        AES_KEY key;
+        AES_set_decrypt_key((unsigned char *)sort_by[3],128,&key);
+        AES_decrypt((unsigned char*)safePass.data(),cipher1,&key);
+        m_pass = (char*)cipher1;
+    }
 }
 void MainWindow::updateSettings(QSettings& settings, const QString& current, const QString& def, const QString& key)
 {
@@ -254,6 +281,21 @@ void MainWindow::flushSettings()
     updateSettings(conf, QString("%1").arg(ui->comboBoxMatch->currentIndex()), "0", "matched_in");
     updateSettings(conf, QString("%1").arg(ui->comboBoxSort->currentIndex()), "0", "sort_by");
     updateSettings(conf, QString("%1").arg(ui->checkBox->checkState()), "0", "reverse_sorting");
+
+    updateSettings(conf, m_user, "", "user");
+    updateSettings(conf, QString("%1").arg(m_syncMode), "0", "sync_mode");
+
+    if(m_pass != "") {
+        AES_KEY key;
+        AES_set_encrypt_key((unsigned char *)sort_by[3],128,&key);
+        unsigned char cipher1[64]={0};
+
+        AES_encrypt((unsigned char *)m_pass.toUtf8().data(), cipher1, &key);
+        QString safePass = QByteArray::fromRawData((char*)cipher1,64).toBase64();
+        conf.setValue("pass", safePass);
+    }
+    else 
+        conf.remove("pass");
 }
 void MainWindow::toggleVisibility()
 {
@@ -293,15 +335,10 @@ void MainWindow::silentNewTextNote()
 #endif
     content = QApplication::clipboard()->text()+"\n"+content;
 
-    _saveNote(0, title, content, QStringList(tr("Untagged")), false);
+    _saveNote(0, title, content, QStringList(tr("Untagged")), false, 0, 2, 0, 0, NULL);
 }
 void MainWindow::silentNewHtmlNote()
 {
-    if(m_savingNewHtmlNote) {
-        QMessageBox::warning(NULL, "WikeNotes", tr("Another note is being saved now, please try later.")); 
-        return;
-    }
-    m_savingNewHtmlNote = true;
 #ifdef WIN32
     ::Sleep(300);
     keybd_event(VK_CONTROL,MapVirtualKey (VK_CONTROL, 0),0,0);
@@ -312,7 +349,7 @@ void MainWindow::silentNewHtmlNote()
 #endif
 
     QClipboard *clipboard = QApplication::clipboard();
-    m_pendingTitle = getTitleFromContent(clipboard->text());
+    QString title = getTitleFromContent(clipboard->text());
     QString content = clipboard->mimeData()->html();
     content = content.replace(QRegExp("<!--StartFragment-->"),"");
     content = content.replace(QRegExp("<!--EndFragment-->"),"");
@@ -332,61 +369,151 @@ void MainWindow::silentNewHtmlNote()
 #endif
     content = "<a href='"+QApplication::clipboard()->text()+"'>"+QApplication::clipboard()->text()+"</a><br>"+content;
 
-    if(!prepareAttchment(content)){
-        _saveNote(0, m_pendingTitle, content, QStringList(tr("Untagged")), true);
-        m_savingNewHtmlNote = false;
-    }
+    prepareSavingNote(0, title, content, QStringList(tr("Untagged")), 0, 2, 0, 0);
 }
-bool MainWindow::prepareAttchment(const QString& content)
+void MainWindow::prepareSavingNote(int noteId, QString title, QString content, QStringList tags, 
+                int gid, int status, int createTime, int updateTime)
 {
-    QWebFrame* iframe = m_savingPage.mainFrame();
-    iframe->setHtml(content);
-    QWebElementCollection col = iframe->findAllElements("img");
-
-    if(col.count() > 0) {
-        QString imgName;
-        QRegExp rx("^wike://[0-9a-f]+$");
-        foreach (QWebElement el, col) {
-            imgName = el.attribute("src");
-            if(el.attribute("embed").toLower() != "link" && !rx.exactMatch(imgName)) {
-                QNetworkReply *reply = m_networkManager->get(QNetworkRequest(QUrl(imgName)));
-                m_pendingImages[reply] = el;
-            }
+    SavingNote* savingNote = new SavingNote(noteId, title, content, tags, gid, status, createTime, updateTime);
+    QRegExp rx("<\\s*img[^>]+src=[\"']([^\"']+)[\"'][^>]*>");
+    QString imgName;
+    QString imgElem;
+    int pos = 0;
+    while ((pos = rx.indexIn(content, pos)) != -1) {
+        imgElem = rx.cap(0);
+        imgName = rx.cap(1);
+        if(imgElem.indexOf(" embed=\"link\"") == -1
+                && imgName.indexOf("wike://") == -1
+                && !savingNote->images.contains(imgName)) {
+            QNetworkReply *reply = m_networkManager->get(QNetworkRequest(QUrl(imgName)));
+            savingNote->images[imgName] = QImage();
+            savingNote->countDown++;
+            m_savingNotes[reply] = savingNote;
         }
+
+        pos += rx.matchedLength();
     }
-    return !m_pendingImages.isEmpty();
+    if(savingNote->countDown == 0) {
+        delete savingNote;
+        savingNote = NULL;
+        _saveNote(noteId, title, content, tags, true, gid, status, createTime, updateTime, NULL);
+    }
 }
 void MainWindow::networkFinished(QNetworkReply* reply)
 {
     QNetworkReply::NetworkError err = reply->error();
-    if(m_pendingImages.contains(reply)) {
-        QByteArray imgBlock;
-        if(QNetworkReply::NoError == err) 
-            imgBlock = reply->readAll();
-        else
-            imgBlock = "";
+    QByteArray response;
+    if(QNetworkReply::NoError == err) 
+        response = reply->readAll();
 
-        QImage image;
-        image.loadFromData(imgBlock);
-
-        QByteArray sha1Sum = QCryptographicHash::hash(imgBlock, QCryptographicHash::Sha1);
-        QString imgName = sha1Sum.toHex();
-        m_pendingImages[reply].setAttribute("src", "wike://"+imgName);
-        m_pendingImages.remove(reply);
-        reply->deleteLater();
-        m_attachedImages[imgName] = image;
-        if(m_pendingImages.isEmpty()) {
-            QString content = m_savingPage.mainFrame()->findFirstElement("body").toInnerXml();
-            if(m_pendingNoteItem) {
-                _saveNote(m_pendingNoteItem->getNoteId(), m_pendingNoteItem->getTitle(), content, m_pendingNoteItem->getTags(), true);
-                m_pendingNoteItem = NULL;
+    QNetworkAccessManager::Operation op = reply->operation();
+    QString urlPath = reply->url().path();
+    QString contentType = reply->rawHeader("Content-Type");
+    if(op == QNetworkAccessManager::GetOperation) {
+        if(urlPath == "/index.php/post/get") {
+            if(QNetworkReply::NoError == err && contentType == "text/plain") {
+                QStringList rs = QString(response).split(",");
+                QMap<int,int> rNotes;
+                int len = rs.size()-1;
+                for(int i=0;i<len;i+=2 ) {
+                    rNotes[rs[i].toUInt()] = rs[i+1].toUInt();
+                }
+                _syncNotes(rNotes);
             }
-            else 
-                _saveNote(0, m_pendingTitle, content, QStringList(tr("Untagged")), true);
+            else
+                m_syncLog.write(QString("[%1] sync error: %2\n").arg(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")).arg(err).toUtf8());
+        }
+        else if(m_savingNotes.contains(reply)) {
+            QImage image;
+            image.loadFromData(response);
+            QByteArray sha1Sum = QCryptographicHash::hash(response, QCryptographicHash::Sha1);
+            QString imgName = sha1Sum.toHex();
 
-            m_savingNewHtmlNote = false;
+            SavingNote* savingNote = m_savingNotes[reply];
+            savingNote->countDown--;
+            QString imgUrl = reply->url().toString();
+            savingNote->images.remove(imgUrl);
+            savingNote->images[imgName] = image;
+            savingNote->content = savingNote->content.replace(imgUrl, "wike://"+imgName);
+            m_savingNotes.remove(reply);
+
+            if(savingNote->countDown == 0) {
+                _saveNote(savingNote->noteId, savingNote->title, savingNote->content, savingNote->tags, true,
+                        savingNote->gid, savingNote->status, savingNote->created, savingNote->updated, savingNote);
+                delete savingNote;
+            }
+        }
+        else if(m_pullingNotes.contains(reply)) {
+            if(QNetworkReply::NoError == err && contentType == "text/plain") {
+                int sp = response.indexOf(":");
+                QList<QByteArray> rs = response.left(sp).split(',');
+                if(rs.size() == 8) {
+                    //echo $id.",".$type.",".$status.",".$create_time.",".$update_time.",".strlen($title).",".strlen($content).",".strlen($tags).":";
+                    //echo $title.$content.$tags;
+                    sp++;
+                    QString title = QString::fromUtf8(response.mid(sp,rs[5].toUInt()));
+                    sp += rs[5].toUInt();
+                    QString content = QString::fromUtf8(response.mid(sp,rs[6].toUInt()));
+                    content = content.replace("src=\"/resources/","src=\"http://"+C_ServerAddr+"/resources/");
+                    sp += rs[6].toUInt();
+                    QStringList tags = QString::fromUtf8(response.mid(sp,rs[7].toUInt())).split(QRegExp("\\s*,\\s*"));
+
+                    if(rs[1].toUInt() == 1)
+                        prepareSavingNote(0, title, content, tags, rs[0].toUInt(), rs[2].toUInt(), rs[3].toUInt(), rs[4].toUInt());
+                    else
+                        _saveNote(0, title, content, tags, false, rs[0].toUInt(), rs[2].toUInt(), rs[3].toUInt(), rs[4].toUInt(), NULL);
+                }
+            }
+            else
+                m_syncLog.write(QString("[%1] pull note error: %2 - %3\n").arg(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")).arg(err).arg(urlPath).toUtf8());
+            m_pullingNotes.remove(reply);
         }
     }
+    else if(op == QNetworkAccessManager::PostOperation) {
+        if(urlPath == "/index.php/user/login") {
+            if(QNetworkReply::NoError == err && contentType == "text/plain") {
+                m_uid = QString(response).toUInt();
+                if(m_uid > 0) {
+                    ui->action_Publish_Notes->setEnabled(true);
+                    ui->action_Logon_Server->setEnabled(false);
+                    ui->actionLog_Off->setEnabled(true);
+                    setWindowTitle(QString("WikeNotes (%1) %2@%3").arg(m_dbName).arg(m_user).arg(C_ServerAddr));
+                    if(m_syncMode)
+                        m_syncTimer = startTimer(3000);
+                }
+                else {
+                    ui->action_Publish_Notes->setEnabled(false);
+                    ui->action_Logon_Server->setEnabled(true);
+                    ui->actionLog_Off->setEnabled(false);
+                    setWindowTitle(QString("WikeNotes (%1)").arg(m_dbName));
+                    QMessageBox::warning(this, "WikeNotes", tr("Failed to login.")); 
+                }
+            }
+            else
+                m_syncLog.write(QString("[%1] login error: %2\n").arg(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")).arg(err).toUtf8());
+        }
+        else if(urlPath.startsWith("/post/delete/id/")) {
+            if(QNetworkReply::NoError == err && contentType == "text/plain") 
+                delNoteByGid(urlPath.mid(16).toUInt());
+            else
+                m_syncLog.write(QString("[%1] delete note error: %2 - %3\n").arg(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")).arg(err).arg(urlPath).toUtf8());
+        }
+        else if(m_pushingNotes.contains(reply)) {
+            if(QNetworkReply::NoError == err && contentType == "text/plain") {
+                int gid = QString(response).toUInt();
+                if(gid > 0) 
+                    m_q->SqlStatement(QString("UPDATE notes SET gid=%1 where rowid=%2").arg(gid).arg(m_pushingNotes[reply]).toUtf8());
+                m_pushingNotes.remove(reply);
+            }
+            else
+                m_syncLog.write(QString("[%1] push note error: %2 - %3\n").arg(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")).arg(err).arg(urlPath).toUtf8());
+        }
+    }
+    reply->deleteLater();
+}
+void MainWindow::timerEvent(QTimerEvent *event)
+{
+    syncNotes();
 }
 void MainWindow::handleSingleMessage(const QString&msg)
 {
@@ -469,8 +596,7 @@ bool MainWindow::openDB(const QString& dbName)
                 tr("Would you like to protect your notes library with a password?\nCancel to set no password.\n\nPassword: "), QLineEdit::Password);
         if (!password.isEmpty()) 
             m_q->SqlStatement("PRAGMA key = '"+QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha1).toHex()+"';");
-        m_q->SqlStatement("CREATE TABLE notes(title TEXT, content TEXT, tag TEXT, hash TEXT)");
-        m_q->SqlStatement("CREATE TABLE notes_attr(rowid INTEGER PRIMARY KEY ASC, created DATETIME)");
+        m_q->SqlStatement("CREATE TABLE notes(title TEXT, content TEXT, tag TEXT, hash TEXT, create_time TEXT, update_time INTEGER, gid INTEGER, status INTEGER)");
         m_q->SqlStatement("CREATE TABLE notes_res(res_name VARCHAR(40), noteid INTEGER, res_type INTEGER, res_data BLOB, CONSTRAINT unique_res_within_a_note UNIQUE (res_name, noteid) )");
         ret = true;
     }
@@ -498,6 +624,14 @@ bool MainWindow::openDB(const QString& dbName)
         refreshCat();
         loadNotes();
         m_dbName = dbName;
+        if(m_dbName == QCoreApplication::applicationDirPath()+"/default.wike") {
+            ui->action_Logon_Server->setEnabled(true);
+            if(m_pass != "") 
+                requestLogin();
+        }
+        else {
+            ui->action_Logon_Server->setEnabled(false);
+        }
     }
     else 
         closeDB();
@@ -510,6 +644,8 @@ void MainWindow::closeDB()
     delete m_q;
     m_db->Close();
     delete m_db;
+    if(m_uid > 0)
+        requestLogoff();
 }
 SQLiteStatement* MainWindow::getSqlQuery()
 {
@@ -519,9 +655,9 @@ SQLiteStatement* MainWindow::getFoundNote(int idx)
 {
     QString sql;
     if(idx == -1)
-        sql = QString("select rowid,title,content,tag,created from notes left join notes_attr on notes.rowid=notes_attr.rowid %1 order by created asc").arg(m_criterion);
+        sql = QString("select rowid,title,content,tag,create_time,update_time,gid,status from notes %1 order by create_time asc").arg(m_criterion);
     else {
-        sql = "select rowid,title,content,tag,created from notes left join notes_attr on notes.rowid=notes_attr.rowid "
+        sql = "select rowid,title,content,tag,create_time from notes "
             + m_criterion
             + " order by "
             + sort_by[ui->comboBoxSort->currentIndex()]
@@ -542,7 +678,7 @@ void MainWindow::loadImageFromDB(const QString& fileName, QByteArray& imgData)
 }
 void MainWindow::loadNotes()
 {
-    QString catString = "1";
+    QString catString = "status!=3";
     if(!m_catList.empty()) {
         if(m_leftPanel) {
             catString = QString("( (%1) ").arg(tag_like).replace(QRegExp("KEYWORD"),m_catList[0]);
@@ -551,25 +687,25 @@ void MainWindow::loadNotes()
             catString += ")";
         }
         else {
-            catString = QString("( created like '%1%' ").arg(m_catList[0]);
+            catString = QString("( create_time like '%1%' ").arg(m_catList[0]);
             for(int i =1 ; i < m_catList.size() ; i++) 
-                catString += QString("or created like '%1%' ").arg(m_catList[i]);
+                catString += QString("or create_time like '%1%' ").arg(m_catList[i]);
             catString += ")";
         }
     }
     m_criterion = "";
     if(s_query != "") {
+        QString query = s_query;
+        query.replace("'", "''");
+        query.replace("%", "\\%");
         m_criterion  = query_like[ui->comboBoxMatch->currentIndex()];
-        m_criterion  = " where " + m_criterion.replace(QRegExp("KEYWORD"),s_query)+" and "+catString;
+        m_criterion  = " where " +m_criterion.replace(QRegExp("KEYWORD"),query)+" and "+catString;
     }
     else
         m_criterion = " where " + catString;
 
     QString sql;
-    if(m_leftPanel)
-        sql = QString("select count(*) from notes %1").arg(m_criterion);
-    else
-        sql = QString("select count(*) from notes left join notes_attr on notes.rowid=notes_attr.rowid %1").arg(m_criterion);
+    sql = QString("select count(*) from notes %1").arg(m_criterion);
     m_found = m_q->SqlAggregateFuncResult(sql.toUtf8());
     ui->comboBoxPage->m_pageNum = qCeil(m_found/(float)page_size);
     ui->comboBoxPage->setCurrentIndex(0);
@@ -622,7 +758,7 @@ void MainWindow::splitterMoved()
 {
     resizeEvent(0);
 }
-int MainWindow::insertNote(QString& title, QString& content, QString& tag, QString& hashKey, QString& datetime)
+int MainWindow::insertNote(QString& title, QString& content, QString& tag, QString& hashKey, QString& createTime, int updateTime, int gid, int status)
 {
     int ret = 2;
     QString sql = "select rowid from notes where hash='"+hashKey+"'";
@@ -634,17 +770,19 @@ int MainWindow::insertNote(QString& title, QString& content, QString& tag, QStri
     else {
         title.replace("'","''");
         content.replace("'","''");
-        sql = "INSERT INTO notes(title, content, tag, hash) VALUES('";
+        sql = "INSERT INTO notes(title, content, tag, hash, create_time, update_time, gid, status) VALUES('";
         sql += title+"','";
         sql += content+"','";
         sql += tag+"','";
-        sql += hashKey+"')";
-        m_q->SqlStatement(sql.toUtf8());
-        sql = QString("INSERT INTO notes_attr(created) VALUES('%1')").arg(datetime);
+        sql += hashKey+"','";
+        sql += createTime+"',";
+        sql += QString("%1").arg(updateTime)+",";
+        sql += QString("%1").arg(gid)+",";
+        sql += QString("%1").arg(status)+")";
         m_q->SqlStatement(sql.toUtf8());
         ret = 0;
 
-        QString month = datetime.mid(0,7);
+        QString month = createTime.mid(0,7);
         QStringList lst = m_monthModel->stringList();
         if(lst.indexOf(month) == -1) {
             int i = 1, len = lst.count();
@@ -661,9 +799,11 @@ QString MainWindow::getTitleFromContent(const QString& content)
 {
     QString title;
     QString temp = content.simplified();
-    if(temp.length() > 30) {
+    int len = temp.length();
+    if(len > 30) 
         title = temp.mid(0,28)+"...";
-    }
+    else if(len == 0)
+        title = tr("Untitled");
     else
         title = temp;
     return title;
@@ -728,7 +868,7 @@ QStringList MainWindow::getTagsOf(int row)
 int MainWindow::getTagCount(const QString& tag)
 {
     int ret = 0;
-    QString sql = QString("select count(*) from notes where (%1)").arg(tag_like);
+    QString sql = QString("select count(*) from notes where (%1) and status!=3").arg(tag_like);
     sql = sql.replace(QRegExp("KEYWORD"),tag);
     m_q->Sql(sql.toUtf8());
     if(m_q->FetchRow()) {
@@ -753,55 +893,74 @@ void MainWindow::removeTag(const QString& tag)
     if(i > 0) 
         m_tagModel->removeRows(i,1);
 }
-bool MainWindow::delActiveNote()
+void MainWindow::delNoteByGid(int gid)
+{
+    int row = 0;
+    QString sql = QString("select rowid from notes where gid=%1").arg(gid);
+    m_q->Sql(sql.toUtf8());
+    if(m_q->FetchRow()) 
+        row = m_q->GetColumnInt(0);
+    m_q->FreeQuery();
+
+    sql = QString("delete from notes where rowid=%1").arg(row);
+    m_q->SqlStatement(sql.toUtf8());
+    sql = QString("delete from notes_res where noteid=%1").arg(row);
+    m_q->SqlStatement(sql.toUtf8());
+}
+void MainWindow::requestDeleteNote(int gid)
+{
+    QNetworkRequest req(QUrl(QString("http://"+C_ServerAddr+"/index.php/post/delete/id/%1").arg(gid)));
+    m_networkManager->post(req, "");
+}
+void MainWindow::delActiveNote()
 {
     NoteItem* activeItem = NoteItem::getActiveItem();
     int row = activeItem->getNoteId();
-    bool ret = false;
-    if(row > 0) {
-        QString oldMonth;
-        QString sql = QString("select created from notes_attr where rowid=%1").arg(row);
-        m_q->Sql(sql.toUtf8());
-        if(m_q->FetchRow()) {
-            oldMonth = (char*)m_q->GetColumnCString(0);
-            oldMonth = oldMonth.mid(0,7);
-        }
-        m_q->FreeQuery();
+    int gid = activeItem->getGID();
+    QString oldMonth;
+    QString sql = QString("select create_time from notes where rowid=%1").arg(row);
+    m_q->Sql(sql.toUtf8());
+    if(m_q->FetchRow()) {
+        oldMonth = (char*)m_q->GetColumnCString(0);
+        oldMonth = oldMonth.mid(0,7);
+    }
+    m_q->FreeQuery();
 
-        QStringList oldTags = getTagsOf(row);
-        sql = QString("delete from notes where rowid=%1").arg(row);
+    QStringList oldTags = getTagsOf(row);
+    if(gid > 0) {
+        //update status to deleted
+        sql = QString("UPDATE notes SET status=3 WHERE rowid=%1").arg(row);
         m_q->SqlStatement(sql.toUtf8());
-        sql = QString("delete from notes_attr where rowid=%1").arg(row);
+        if(m_uid > 0)
+            requestDeleteNote(gid);
+    }
+    else {
+        sql = QString("delete from notes where rowid=%1").arg(row);
         m_q->SqlStatement(sql.toUtf8());
         sql = QString("delete from notes_res where noteid=%1").arg(row);
         m_q->SqlStatement(sql.toUtf8());
-
-        NoteItem* item = ui->noteList->getNextNote(activeItem, 1);
-        if(ret == 0)
-            ret = ui->noteList->getNextNote(activeItem, -1);
-        NoteItem::setActiveItem(item);
-        ui->noteList->removeNote(activeItem);
-
-        int i, oldTagSize = oldTags.size();
-        for(i=0; i<oldTagSize; ++i) {
-            if(getTagCount(oldTags[i]) == 0)
-                removeTag(oldTags[i]);
-        }
-
-        sql = QString("select count(*) from notes_attr where (created like '%1%')").arg(oldMonth);
-        m_q->Sql(sql.toUtf8());
-        if(m_q->FetchRow() && m_q->GetColumnInt(0) == 0) {
-            i = m_monthModel->stringList().indexOf(oldMonth);
-            if(i > 0) 
-                m_monthModel->removeRows(i,1);
-        }
-        m_q->FreeQuery();
-
-        ret = true;
     }
-    else
-        ret = true;
-    return ret;
+
+    NoteItem* item = ui->noteList->getNextNote(activeItem, 1);
+    if(item == 0)
+        item = ui->noteList->getNextNote(activeItem, -1);
+    NoteItem::setActiveItem(item);
+    ui->noteList->removeNote(activeItem);
+
+    int i, oldTagSize = oldTags.size();
+    for(i=0; i<oldTagSize; ++i) {
+        if(getTagCount(oldTags[i]) == 0)
+            removeTag(oldTags[i]);
+    }
+
+    sql = QString("select count(*) from notes where (create_time like '%1%')").arg(oldMonth);
+    m_q->Sql(sql.toUtf8());
+    if(m_q->FetchRow() && m_q->GetColumnInt(0) == 0) {
+        i = m_monthModel->stringList().indexOf(oldMonth);
+        if(i > 0) 
+            m_monthModel->removeRows(i,1);
+    }
+    m_q->FreeQuery();
 }
 void MainWindow::newPlainNote()
 {
@@ -846,9 +1005,29 @@ void MainWindow::setCurrentCat(const QString& cat) {
         ui->tagView->setCurrentIndex(idx);
     }
 }
-void MainWindow::_saveNote(int noteId, QString title, QString content, QStringList tags, bool rich)
+void MainWindow::_saveNote(int noteId, QString title, QString content, QStringList tags, bool rich,
+                int gid, int status, int createTime, int updateTime, SavingNote* savingNote)
 {
-    QString datetime = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
+    QString sql;
+
+    if(noteId == 0 && gid > 0) {
+        sql = QString("select rowid from notes where gid=%1").arg(gid);
+        m_q->Sql(sql.toUtf8());
+        if(m_q->FetchRow()) 
+            noteId = m_q->GetColumnInt(0);
+        m_q->FreeQuery();
+    }
+    QDateTime updated = QDateTime::currentDateTime();
+    if(updateTime > 0)
+        updated = QDateTime::fromTime_t(updateTime);
+    else
+        updateTime = updated.toTime_t();
+
+    QString created;
+    if(createTime > 0) 
+        created = QDateTime::fromTime_t(createTime).toString("yyyy-MM-dd hh:mm:ss");
+    else 
+        created = updated.toString("yyyy-MM-dd hh:mm:ss");
 
     bool ret = false;
     QString hashKey = QCryptographicHash::hash(content.toUtf8(), QCryptographicHash::Sha1).toHex();
@@ -859,7 +1038,7 @@ void MainWindow::_saveNote(int noteId, QString title, QString content, QStringLi
             newTagCount[i] = getTagCount(tags[i]);
         }
         if(noteId > 0) {
-            QString sql = "select rowid from notes where hash='"+hashKey+"'";
+            sql = "select rowid from notes where hash='"+hashKey+"'";
             m_q->Sql(sql.toUtf8());
             int conflictRow = noteId;
             if(m_q->FetchRow()) 
@@ -875,13 +1054,12 @@ void MainWindow::_saveNote(int noteId, QString title, QString content, QStringLi
                 title.replace("'","''");
                 content.replace("'","''");
                 sql = "UPDATE notes SET ";
-                if(title != "")
-                    ups << "title='"+title+"'";
-                if(content != "") {
-                    ups << "content='"+content+"'";
-                    ups << "hash='"+hashKey+"'";
-                }
+                ups << "title='"+title+"'";
+                ups << "content='"+content+"'";
                 ups << "tag='"+tags.join(",")+"'";
+                ups << "hash='"+hashKey+"'";
+                ups << "update_time="+QString("%1").arg(updateTime);
+                ups << "status="+QString("%1").arg(status);
                 sql += ups.join(",");
                 sql += QString(" WHERE rowid=%1").arg(noteId);
                 m_q->SqlStatement(sql.toUtf8());
@@ -899,7 +1077,7 @@ void MainWindow::_saveNote(int noteId, QString title, QString content, QStringLi
         }
         else {
             QString tag = tags.join(",");
-            if(insertNote(title, content, tag, hashKey, datetime) == 0) {
+            if(insertNote(title, content, tag, hashKey, created, updateTime, gid, status) == 0) {
                 ret = true;
                 for(i=0; i<tagSize; ++i) {
                     if(newTagCount[i] == 0)
@@ -952,7 +1130,7 @@ void MainWindow::_saveNote(int noteId, QString title, QString content, QStringLi
 
             for(it = res_to_add.begin(); it != res_to_add.end(); it++) {
                 imgName = *it;
-                QImage image = m_attachedImages[imgName];
+                QImage image = savingNote->images[imgName];
 
                 QBuffer buffer;
                 QImageWriter writer(&buffer, "PNG");
@@ -960,29 +1138,23 @@ void MainWindow::_saveNote(int noteId, QString title, QString content, QStringLi
 
                 insertNoteRes(imgName, noteId, (int)QTextDocument::ImageResource, buffer.data());
             }
-            m_attachedImages.clear();
         }
         if(m_leftPanel)
             setCurrentCat(tags[0]);
         else 
-            setCurrentCat(datetime.mid(0,7));
+            setCurrentCat(created.mid(0,7));
     }
 }
 void MainWindow::saveNote()
 {
-    if(m_savingNewHtmlNote) {
-        QMessageBox::warning(this, "WikeNotes", tr("Another note is being saved now, please try later.")); 
-        return;
-    }
     NoteItem* activeItem = NoteItem::getActiveItem();
     QString content = activeItem->getContent();
-    bool rich = activeItem->isRich();
-    if(rich && prepareAttchment(content))
-        m_pendingNoteItem = activeItem;
-    else {
-        _saveNote(activeItem->getNoteId(), activeItem->getTitle(), content, activeItem->getTags(), rich);
-        m_savingNewHtmlNote = false;
-    }
+    if(activeItem->isRich())
+        prepareSavingNote(activeItem->getNoteId(), activeItem->getTitle(), content, activeItem->getTags(),
+                activeItem->getGID(), activeItem->getStatus(), 0, 0);
+    else
+        _saveNote(activeItem->getNoteId(), activeItem->getTitle(), content, activeItem->getTags(), false,
+                activeItem->getGID(), activeItem->getStatus(), 0, 0, NULL);
 }
 void MainWindow::statusMessage(const QString& msg)
 {
@@ -998,7 +1170,7 @@ void MainWindow::importDone(int action)
 void MainWindow::refreshCat()
 {
     QStringList tagList;
-    m_q->Sql("select distinct tag from notes");
+    m_q->Sql("select distinct tag from notes where status!=3");
     while(m_q->FetchRow()) {
         tagList << QString::fromUtf8((char*)m_q->GetColumnCString(0)).split(",");
     }
@@ -1009,7 +1181,7 @@ void MainWindow::refreshCat()
     m_tagModel->setStringList(tagList);
 
     QStringList monthList;
-    m_q->Sql("select distinct substr(created,0,8) from notes left join notes_attr on notes.rowid=notes_attr.rowid");
+    m_q->Sql("select distinct substr(create_time,0,8) from notes where status!=3");
     while(m_q->FetchRow()) {
         monthList << (char*)m_q->GetColumnCString(0);
     }
@@ -1050,127 +1222,150 @@ void ImportDialog::closeEvent(QCloseEvent *event)
         event->ignore();
     }
 }
-void NotesImporter::run()
+void NotesImporter::doImport()
 {
-    QFile file(m_file);
-    if(m_action == 0) {
-        if (file.open(QIODevice::ReadOnly)) {
-            int success = 0, fail = 0;
-            QFile log(m_file+".log");
-            QString logString;
-            log.open(QIODevice::WriteOnly | QIODevice::Append);
+    QFile file(m_para);
+    if (file.open(QIODevice::ReadOnly)) {
+        int success = 0, fail = 0;
+        QFile log(m_para+".log");
+        QString logString;
+        log.open(QIODevice::WriteOnly | QIODevice::Append);
 
-            QXmlStreamReader xml(&file);
-            QString title,datetime,link,tag,content,hashKey,res_name,res_type;
-            int res_flag = 0;
-            QByteArray res_data;
-            SQLiteStatement *q = g_mainWindow->getSqlQuery();
-            q->Sql("select rowid from notes order by rowid desc limit 1");
-            int noteId = 1;
-            if(q->FetchRow())
-                noteId = q->GetColumnInt(0)+1;
-            q->FreeQuery();
-            while (!xml.atEnd()) {
-                if (xml.isStartElement()) {
-                    if(xml.name() == "note") {
-                        QXmlStreamAttributes attrs = xml.attributes();
-                        title = attrs.value("title").toString();
-                        datetime = attrs.value("created").toString();
-                        tag = attrs.value("tags").toString();
-                        tag = (tag == "") ? tr("Untagged") : tag;
-                    }
-                    else if(xml.name() == "resource") {
-                        QXmlStreamAttributes attrs = xml.attributes();
-                        res_name = attrs.value("name").toString();
-                        res_type = attrs.value("type").toString();
-                        res_flag = 1;
-                    }
-                }
-                else if(xml.isCDATA()) {
-                    if(res_flag)
-                        res_data = QByteArray::fromBase64(xml.text().toString().toAscii());
+        QXmlStreamReader xml(&file);
+        QString title,create_time,link,tag,content,hashKey,res_name,res_type;
+        int gid, status, update_time;
+        int res_flag = 0;
+        QByteArray res_data;
+        SQLiteStatement *q = g_mainWindow->getSqlQuery();
+        q->Sql("select rowid from notes order by rowid desc limit 1");
+        int noteId = 1;
+        if(q->FetchRow())
+            noteId = q->GetColumnInt(0)+1;
+        q->FreeQuery();
+        while (!xml.atEnd()) {
+            if (xml.isStartElement()) {
+                if(xml.name() == "note") {
+                    QXmlStreamAttributes attrs = xml.attributes();
+                    title = attrs.value("title").toString();
+                    create_time = attrs.value("created").toString();
+                    if(attrs.hasAttribute("updated"))
+                        update_time = attrs.value("updated").toString().toUInt();
                     else
-                        content = xml.text().toString();
+                        update_time = QDateTime::fromString(create_time, "yyyy-MM-dd hh:mm:ss").toTime_t();
+                    if(attrs.hasAttribute("gid"))
+                        gid = attrs.value("gid").toString().toUInt();
+                    else
+                        gid = 0;
+                    if(attrs.hasAttribute("status"))
+                        status = attrs.value("status").toString().toUInt();
+                    else
+                        status = 2;
+                    tag = attrs.value("tags").toString();
+                    tag = (tag == "") ? tr("Untagged") : tag;
                 }
-                else if(xml.isEndElement()) {
-                    if(xml.name() == "note") {
-                        hashKey = QCryptographicHash::hash(content.toUtf8(), QCryptographicHash::Sha1).toHex();
-                        int ret = g_mainWindow->insertNote(title,content,tag,hashKey,datetime);
-                        if(ret == 0) {
-                            success++;
-                            noteId++;
-                        }
-                        else if(ret == 1) {
-                            fail++;
-                            logString = tr("Note already exists in the notes library: %1\n").arg(title); 
-                            log.write(logString.toLocal8Bit());
-                        }
-                        else {
-                            fail++;
-                            logString = tr("SQL Error: %1\n").arg(title);
-                            log.write(logString.toLocal8Bit());
-                        }
-                        emit importMsg(tr("Status of importing notes from %1:\n\nSuccess:\t%2\nFail:\t%3\nLog:\t%4.log").arg(m_file).arg(success).arg(fail).arg(m_file));
-                    }
-                    else if(xml.name() == "resource") {
-                        res_flag = 0;
-                        g_mainWindow->insertNoteRes(res_name,noteId,res_type.toInt(),res_data);
-                    }
+                else if(xml.name() == "resource") {
+                    QXmlStreamAttributes attrs = xml.attributes();
+                    res_name = attrs.value("name").toString();
+                    res_type = attrs.value("type").toString();
+                    res_flag = 1;
                 }
-                xml.readNext();
             }
-            file.close();
-            logString = tr("\nSummary of importing notes from %1:\nSuccess:\t%2\nFail:\t%3\n").arg(m_file).arg(success).arg(fail);
-            log.write(logString.toLocal8Bit());
-        }
-    }
-    else if(m_action == 1){
-        if (file.open(QIODevice::WriteOnly)) {
-            QByteArray xmlData = QByteArray();
-
-            QXmlStreamWriter writer(&xmlData);
-            writer.setAutoFormatting(true);
-
-            writer.writeStartDocument();
-
-            writer.writeStartElement("wikenotes");
-
-            SQLiteStatement* q = g_mainWindow->getFoundNote(-1);
-            SQLiteStatement q_res(*q);
-            int noteId;
-            while(q->FetchRow()) {
-                noteId = q->GetColumnInt(0);
-                writer.writeStartElement("note");
-                writer.writeAttribute("title", QString::fromUtf8((char*)q->GetColumnCString(1)));
-                writer.writeAttribute("tags", QString::fromUtf8((char*)q->GetColumnCString(3)));
-                writer.writeAttribute("created", (char*)q->GetColumnCString(4));
-                writer.writeCDATA(QString::fromUtf8((char*)q->GetColumnCString(2)));
-
-                q_res.Sql(QString("select res_name,res_type,res_data from notes_res where noteid=%1").arg(noteId).toUtf8());
-                QByteArray res_data;
-                while(q_res.FetchRow()) {
-                    writer.writeStartElement("resource");
-                    writer.writeAttribute("name", QString::fromUtf8((char*)q_res.GetColumnCString(0)));
-                    writer.writeAttribute("type", QString::fromUtf8((char*)q_res.GetColumnCString(1)));
-                    res_data = QByteArray((char*)q_res.GetColumnBlob(2), q_res.GetColumnBytes(2));
-                    writer.writeCDATA(res_data.toBase64());
-                    writer.writeEndElement();
+            else if(xml.isCDATA()) {
+                if(res_flag)
+                    res_data = QByteArray::fromBase64(xml.text().toString().toAscii());
+                else
+                    content = xml.text().toString();
+            }
+            else if(xml.isEndElement()) {
+                if(xml.name() == "note") {
+                    hashKey = QCryptographicHash::hash(content.toUtf8(), QCryptographicHash::Sha1).toHex();
+                    int ret = g_mainWindow->insertNote(title,content,tag,hashKey,create_time,update_time,gid,status);
+                    if(ret == 0) {
+                        success++;
+                        noteId++;
+                    }
+                    else if(ret == 1) {
+                        fail++;
+                        logString = tr("Note already exists in the notes library: %1\n").arg(title); 
+                        log.write(logString.toLocal8Bit());
+                    }
+                    else {
+                        fail++;
+                        logString = tr("SQL Error: %1\n").arg(title);
+                        log.write(logString.toLocal8Bit());
+                    }
+                    emit importMsg(tr("Status of importing notes from %1:\n\nSuccess:\t%2\nFail:\t%3\nLog:\t%4.log").arg(m_para).arg(success).arg(fail).arg(m_para));
                 }
-                q_res.FreeQuery();
+                else if(xml.name() == "resource") {
+                    res_flag = 0;
+                    g_mainWindow->insertNoteRes(res_name,noteId,res_type.toInt(),res_data);
+                }
+            }
+            xml.readNext();
+        }
+        file.close();
+        logString = tr("\nSummary of importing notes from %1:\nSuccess:\t%2\nFail:\t%3\n").arg(m_para).arg(success).arg(fail);
+        log.write(logString.toLocal8Bit());
+    }
+}
+void NotesImporter::doExport()
+{
+    QFile file(m_para);
+    if (file.open(QIODevice::WriteOnly)) {
+        QByteArray xmlData = QByteArray();
 
+        QXmlStreamWriter writer(&xmlData);
+        writer.setAutoFormatting(true);
+
+        writer.writeStartDocument();
+
+        writer.writeStartElement("wikenotes");
+
+        SQLiteStatement* q = g_mainWindow->getFoundNote(-1);
+        SQLiteStatement q_res(*q);
+        int noteId;
+        while(q->FetchRow()) {
+            noteId = q->GetColumnInt(0);
+            writer.writeStartElement("note");
+            writer.writeAttribute("title", QString::fromUtf8((char*)q->GetColumnCString(1)));
+            writer.writeAttribute("tags", QString::fromUtf8((char*)q->GetColumnCString(3)));
+            writer.writeAttribute("created", (char*)q->GetColumnCString(4));
+            writer.writeAttribute("updated", QString("%1").arg(q->GetColumnInt(5)));
+            writer.writeAttribute("gid", QString("%1").arg(q->GetColumnInt(6)));
+            writer.writeAttribute("status", QString("%1").arg(q->GetColumnInt(7)));
+            writer.writeCDATA(QString::fromUtf8((char*)q->GetColumnCString(2)));
+
+            q_res.Sql(QString("select res_name,res_type,res_data from notes_res where noteid=%1").arg(noteId).toUtf8());
+            QByteArray res_data;
+            while(q_res.FetchRow()) {
+                writer.writeStartElement("resource");
+                writer.writeAttribute("name", QString::fromUtf8((char*)q_res.GetColumnCString(0)));
+                writer.writeAttribute("type", QString::fromUtf8((char*)q_res.GetColumnCString(1)));
+                res_data = QByteArray((char*)q_res.GetColumnBlob(2), q_res.GetColumnBytes(2));
+                writer.writeCDATA(res_data.toBase64());
                 writer.writeEndElement();
             }
-            q->FreeQuery();
+            q_res.FreeQuery();
 
             writer.writeEndElement();
-
-            writer.writeEndDocument();
-
-            file.write(xmlData);
-            file.flush();
-            file.close();
         }
+        q->FreeQuery();
+
+        writer.writeEndElement();
+
+        writer.writeEndDocument();
+
+        file.write(xmlData);
+        file.flush();
+        file.close();
     }
+}
+void NotesImporter::run()
+{
+    if(m_action == 0) 
+        doImport();
+    else if(m_action == 1)
+        doExport();
     emit importDone(m_action);
 }
 void MainWindow::importNotes()
@@ -1178,7 +1373,7 @@ void MainWindow::importNotes()
     QString fileName = QFileDialog::getOpenFileName(this, tr("Import Notes"), ".", tr("xml files (*.xml)"));
 
     if (!fileName.isEmpty()) {
-        m_importer.importFile(fileName);
+        m_importer.start(0, fileName);
         m_importDialog->setFinishFlag(false);
         m_importDialog->exec();
     }
@@ -1188,10 +1383,163 @@ void MainWindow::exportNotes()
     QString fileName = QFileDialog::getSaveFileName(this, tr("Export Notes"), ".", tr("xml files (*.xml)"));
 
     if (!fileName.isEmpty()) {
-        m_importer.exportFile(fileName);
+        m_importer.start(1, fileName);
         m_importDialog->setFinishFlag(false);
         m_importDialog->exec();
     }
+}
+void MainWindow::syncNotes()
+{
+    QNetworkRequest req;
+    req.setRawHeader("User-Agent", "wikenotes");
+    req.setUrl(QUrl("http://"+C_ServerAddr+"/index.php/post/get"));
+    m_networkManager->get(req);
+}
+void MainWindow::_syncNotes(QMap<int,int>& notesData)
+{
+    //0: notes_to_push; 1: notes_to_pull; 2: notes_to_rm; 3: notes_to_rm_remote
+    QVector<int> notes_to_op[4];
+    SQLiteStatement q(*m_q);
+    q.Sql("select rowid,update_time,gid,status from notes");
+    while(q.FetchRow()) {
+        int rid = q.GetColumnInt(0);
+        int gid = q.GetColumnInt(2);
+        if(gid == 0) 
+            notes_to_op[0].append(rid);
+        else {
+            if(notesData.contains(gid)) {
+                if(q.GetColumnInt(3) == 3)
+                    notes_to_op[3].append(gid);
+                else if(notesData[gid] > q.GetColumnInt(1))
+                    notes_to_op[1].append(gid);
+                else if(notesData[gid] < q.GetColumnInt(1))
+                    notes_to_op[0].append(rid);
+                notesData.remove(gid);
+            }
+            else
+                notes_to_op[2].append(rid);
+        }
+    }
+    q.FreeQuery();
+    QMap<int,int>::iterator it;
+    for(it= notesData.begin(); it != notesData.end(); it++) 
+        notes_to_op[1].append(it.key());
+
+    QString sql;
+    int i;
+    for(i=0; i<notes_to_op[3].size(); i++) {
+        requestDeleteNote(notes_to_op[3][i]);
+        m_syncLog.write(QString("[%1] request to delete note (gid: %2)\n").arg(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")).arg(notes_to_op[3][i]).toUtf8());
+    }
+    for(i=0; i<notes_to_op[2].size(); i++) {
+        sql = QString("delete from notes where rowid=%1").arg(notes_to_op[2][i]);
+        q.SqlStatement(sql.toUtf8());
+        sql = QString("delete from notes_res where noteid=%1").arg(notes_to_op[2][i]);
+        q.SqlStatement(sql.toUtf8());
+        m_syncLog.write(QString("[%1] delete note from remote (id: %2)\n").arg(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")).arg(notes_to_op[2][i]).toUtf8());
+    }
+
+    for(i=0; i<notes_to_op[0].size(); i++) {
+        pushNote(notes_to_op[0][i]);
+        m_syncLog.write(QString("[%1] request to push note (id:%2)\n").arg(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")).arg(notes_to_op[0][i]).toUtf8());
+    }
+
+    for(i=0; i<notes_to_op[1].size(); i++) {
+        pullNote(notes_to_op[1][i]);
+        m_syncLog.write(QString("[%1] request to pull note (gid:%2)\n").arg(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")).arg(notes_to_op[1][i]).toUtf8());
+    }
+}
+void MainWindow::pullNote(int gid)
+{
+    QNetworkRequest req;
+    req.setRawHeader("User-Agent", "wikenotes");
+    req.setUrl(QUrl(QString("http://"+C_ServerAddr+"/index.php/post/get/id/%1").arg(gid)));
+    QNetworkReply *reply = m_networkManager->get(req);
+    m_pullingNotes[reply] = gid;
+}
+void MainWindow::pushNote(int rowid)
+{
+    SQLiteStatement q(*m_q);
+    q.Sql(QString("select rowid,title,content,tag,create_time,update_time,gid from notes where rowid=%1").arg(rowid).toUtf8());
+
+    SQLiteStatement q_res(q);
+    QRegExp rx("<img[^>]*src=\"wike://([0-9a-f]+)\"[^>]*>");
+    if(q.FetchRow()) {
+        QByteArray postData;
+        QNetworkRequest req;
+        req.setRawHeader("User-Agent", "wikenotes");
+        QString content = QString::fromUtf8((char*)q.GetColumnCString(2));
+        content = content.replace(rx,"<img src=\"/resources/\\1.png\">");
+        postData.append("Post[title]="+QUrl::toPercentEncoding(QString::fromUtf8((char*)q.GetColumnCString(1)))+"&");
+        postData.append("Post[content]="+QUrl::toPercentEncoding(content)+"&");
+        postData.append("Post[tags]="+QUrl::toPercentEncoding(QString::fromUtf8((char*)q.GetColumnCString(3)))+"&");
+        postData.append("Post[status]=2&");
+        postData.append((Qt::mightBeRichText(content))?"Post[type]=1&":"Post[type]=0&");
+        int gid = q.GetColumnInt(6);
+        if(gid == 0) {
+            postData.append("Post[create_time]="+QString("%1").arg(QDateTime::fromString((char*)q.GetColumnCString(4), "yyyy-MM-dd hh:mm:ss").toTime_t()));
+            req.setUrl(QUrl("http://"+C_ServerAddr+"/index.php/post/create"));
+            QNetworkReply *reply = m_networkManager->post(req, postData);
+            m_pushingNotes[reply] = rowid;
+        }
+        else {
+            req.setUrl(QUrl(QString("http://"+C_ServerAddr+"/index.php/post/update/id/%1").arg(gid)));
+            postData.append("Post[update_time]="+QString("%1").arg(q.GetColumnInt(5)));
+            m_networkManager->post(req, postData);
+        }
+
+        q_res.Sql(QString("select res_name,res_type,res_data from notes_res where noteid=%1").arg(rowid).toUtf8());
+        QByteArray res_data;
+        req.setRawHeader("Content-Type", "image/png");
+        
+        QString uploadUrl = "http://"+C_ServerAddr+"/index.php/post/upload";
+        while(q_res.FetchRow()) {
+            res_data = QByteArray((char*)q_res.GetColumnBlob(2), q_res.GetColumnBytes(2));
+            req.setUrl(QUrl(uploadUrl+QString("?qqfile=%1.png").arg((char*)q_res.GetColumnCString(0))));
+            req.setRawHeader("Content-Length", QString::number(res_data.size()).toAscii());
+            m_networkManager->post(req, res_data);
+            //writer.writeAttribute("type", QString::fromUtf8((char*)q_res.GetColumnCString(1)));
+        }
+        q_res.FreeQuery();
+    }
+    q.FreeQuery();
+}
+void MainWindow::requestLogin()
+{
+    QByteArray postData;
+    postData.append("LoginForm[username]="+m_user+"&");
+    postData.append("LoginForm[password]="+m_pass+"&");
+    postData.append("LoginForm[rememberMe]=0");
+    QNetworkRequest req(QUrl("http://"+C_ServerAddr+"/index.php/user/login"));
+    req.setRawHeader("User-Agent", "wikenotes");
+    m_networkManager->post(req, postData);
+}
+void MainWindow::accountSettings()
+{
+    AccountSettings diag(this, m_user, m_pass, m_syncMode);
+    if(diag.exec() == QDialog::Accepted) {
+        m_user = diag.getUser();
+        m_pass = diag.getPass();
+        m_syncMode = diag.getSyncMode();
+        if(m_syncMode == 0 && m_syncTimer>0) {
+            killTimer(m_syncTimer);
+            m_syncTimer = 0;
+        }
+        requestLogin();
+    }
+}
+void MainWindow::requestLogoff()
+{
+    m_uid = 0;
+    ui->action_Publish_Notes->setEnabled(false);
+    ui->action_Logon_Server->setEnabled(true);
+    ui->actionLog_Off->setEnabled(false);
+    setWindowTitle(QString("WikeNotes (%1)").arg(m_dbName));
+    if(m_syncTimer>0) {
+        killTimer(m_syncTimer);
+        m_syncTimer = 0;
+    }
+    m_networkManager->get(QNetworkRequest(QUrl("http://"+C_ServerAddr+"/index.php/user/logout")));
 }
 void MainWindow::setNoteFont()
 {

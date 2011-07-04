@@ -109,6 +109,8 @@ NoteItem::NoteItem(QWidget *parent, int row, bool readOnly, bool rich) :
     QFrame(parent)
 {
     m_noteId = row;
+    m_gid = 0;
+    m_status = 2;
     m_readOnly = readOnly;
     m_rich = rich;
     m_sized = false;
@@ -127,13 +129,15 @@ void NoteItem::initControls()
 {
     QString rowId, title = tr("Untitled"), tag = tr("Untagged"), created;
     if(m_noteId > 0) {
-        m_q->Sql(QString("select rowid,title,content,tag,created from notes left join notes_attr on notes.rowid=notes_attr.rowid where rowid=%1").arg(m_noteId).toUtf8());
+        m_q->Sql(QString("select rowid,title,content,tag,create_time,gid,status from notes where rowid=%1").arg(m_noteId).toUtf8());
         m_q->FetchRow();
         rowId = QString::fromUtf8((char*)m_q->GetColumnCString(0));
         title = QString::fromUtf8((char*)m_q->GetColumnCString(1));
         m_content = QString::fromUtf8((char*)m_q->GetColumnCString(2));
         tag = QString::fromUtf8((char*)m_q->GetColumnCString(3));
         created = QString::fromUtf8((char*)m_q->GetColumnCString(4));
+        m_gid = m_q->GetColumnInt(5);
+        m_status = m_q->GetColumnInt(6);
         m_rich = Qt::mightBeRichText(m_content);
         m_totalLine = m_content.count('\n');;
     }
@@ -229,6 +233,14 @@ bool NoteItem::isRich()
 int NoteItem::getNoteId() const
 {
     return m_noteId;
+}
+int NoteItem::getGID() const
+{
+    return m_gid;
+}
+int NoteItem::getStatus() const
+{
+    return m_status;
 }
 QString NoteItem::getTitle()
 {

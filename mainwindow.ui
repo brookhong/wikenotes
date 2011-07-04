@@ -110,8 +110,7 @@
      </widget>
     </item>
     <item row="0" column="7">
-     <widget class="PageList" name="comboBoxPage">
-     </widget>
+     <widget class="PageList" name="comboBoxPage" native="true"/>
     </item>
     <item row="1" column="0" colspan="8">
      <widget class="QSplitter" name="vsplitter">
@@ -163,6 +162,10 @@
     <addaction name="separator"/>
     <addaction name="action_Import"/>
     <addaction name="action_Export_Notes"/>
+    <addaction name="separator"/>
+    <addaction name="action_Logon_Server"/>
+    <addaction name="action_Publish_Notes"/>
+    <addaction name="actionLog_Off"/>
     <addaction name="separator"/>
     <addaction name="actionE_Xit"/>
    </widget>
@@ -384,12 +387,41 @@
     <string>Monthly List</string>
    </property>
   </action>
+  <action name="action_Publish_Notes">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>&amp;Sync Notes</string>
+   </property>
+  </action>
+  <action name="action_Logon_Server">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>&amp;Logon to Server</string>
+   </property>
+  </action>
+  <action name="actionLog_Off">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>log&amp;Off from Server</string>
+   </property>
+  </action>
  </widget>
  <customwidgets>
   <customwidget>
    <class>NoteList</class>
    <extends>QWidget</extends>
    <header>notelist.h</header>
+  </customwidget>
+  <customwidget>
+   <class>PageList</class>
+   <extends>QWidget</extends>
+   <header>pagelist.h</header>
   </customwidget>
  </customwidgets>
  <resources>

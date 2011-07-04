@@ -39,23 +39,20 @@ class NotesImporter : public QThread
 {
     Q_OBJECT
     public:
-        void importFile(const QString& fn) {
-            m_action = 0;
-            m_file = fn;
-            start();
-        }
-        void exportFile(const QString& fn) {
-            m_action = 1;
-            m_file = fn;
-            start();
+        void start(int action, const QString& fn = "") {
+            m_action = action;
+            m_para = fn;
+            QThread::start();
         }
         void run();
     signals:
         void importMsg(const QString& msg);
         void importDone(int action);
     private:
-        int m_action; //0: import; 1: export
-        QString m_file;
+        int m_action; //0: import; 1: export;
+        QString m_para;
+        void doImport();
+        void doExport();
 };
 class TagCompleter : public QCompleter
 {
@@ -74,7 +71,7 @@ class MainWindow : public QMainWindow
         bool openDB(const QString& name);
 
         //0: success; 1: already exists; 2: other error
-        int insertNote(QString& title, QString& content, QString& tag, QString& hashKey, QString& datetime);
+        int insertNote(QString& title, QString& content, QString& tag, QString& hashKey, QString& createTime, int updateTime, int gid, int status);
         static QString getTitleFromContent(const QString& content);
 
         bool insertNoteRes(QString& res_name, int noteId, int res_type, const QByteArray& res_data);
@@ -111,14 +108,17 @@ class MainWindow : public QMainWindow
         void newHTMLNote();
         void newNote(bool rich);
         void saveNote();
-        bool delActiveNote();
+        void delActiveNote();
         void importNotes();
         void exportNotes();
+        void syncNotes();
         void instantSearch(const QString& query);
         void tagPressed(const QModelIndex &current);
         void tagChanged(const QItemSelection &selected, const QItemSelection &deselected);
         void splitterMoved();
         void statusMessage(const QString& msg);
+        void accountSettings();
+        void requestLogoff();
         void setNoteFont();
         void setHotKey();
         void changeLanguage();
@@ -169,14 +169,49 @@ class MainWindow : public QMainWindow
         QList<QProcess*> m_extProcs;
 
         QNetworkAccessManager* m_networkManager;
-        QWebPage m_savingPage;
-        bool m_savingNewHtmlNote;
-        QString m_pendingTitle;
-        NoteItem* m_pendingNoteItem;
-        QMap<QNetworkReply *, QWebElement> m_pendingImages;
-        QMap<QString, QImage> m_attachedImages;
-        bool prepareAttchment(const QString& content);
-        void _saveNote(int noteId, QString title, QString content, QStringList tags, bool rich);
+        struct SavingNote {
+            SavingNote(int _noteId, QString _title, QString _content, QStringList _tags,
+                int _gid, int _status, int _createTime, int _updateTime) {
+                noteId = _noteId;
+                title = _title;
+                content = _content;
+                tags = _tags;
+                gid = _gid;
+                status = _status;
+                created = _createTime;
+                updated = _updateTime;
+                countDown = 0;
+            }
+            int noteId, gid, status, created, updated;
+            int countDown;
+            QString title;
+            QString content;
+            QStringList tags;
+            QMap<QString, QImage> images;
+        };
+        QMap<QNetworkReply *, SavingNote*> m_savingNotes;
+
+        void prepareSavingNote(int noteId, QString title, QString content, QStringList tags,
+                int gid, int status, int createTime, int updateTime);
+        void _saveNote(int noteId, QString title, QString content, QStringList tags, bool rich,
+                int gid, int status, int createTime, int updateTime, SavingNote* savingNote);
+
+        int m_uid;
+        QString m_user;
+        QString m_pass;
+        int m_syncMode;
+        int m_syncTimer;
+        QFile m_syncLog;
+        void requestLogin();
+        void requestDeleteNote(int gid);
+        void delNoteByGid(int gid);
+        void pullNote(int gid);
+        void pushNote(int rowid);
+        void _syncNotes(QMap<int,int>& notesData);
+        QMap<QNetworkReply *, int> m_pushingNotes;
+        QMap<QNetworkReply *, int> m_pullingNotes;
+
+        void timerEvent(QTimerEvent *event);
 };
 
 extern MainWindow* g_mainWindow;
