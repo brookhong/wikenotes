@@ -229,6 +229,7 @@
    <addaction name="action_New_Note"/>
    <addaction name="action_Edit_Selected_Note"/>
    <addaction name="action_Save_Note"/>
+   <addaction name="actionLock_Unlock"/>
    <addaction name="action_Delete_Selected_Note"/>
    <addaction name="actionUsage"/>
    <addaction name="action_About"/>
@@ -409,6 +410,18 @@
    </property>
    <property name="text">
     <string>log&amp;Off from Server</string>
+   </property>
+  </action>
+  <action name="actionLock_Unlock">
+   <property name="icon">
+    <iconset resource="resources/wike.qrc">
+     <normaloff>:/lock.png</normaloff>:/lock.png</iconset>
+   </property>
+   <property name="text">
+    <string>Lock/Unlock</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+L</string>
    </property>
   </action>
  </widget>

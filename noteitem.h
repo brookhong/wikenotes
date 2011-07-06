@@ -71,6 +71,7 @@ class NoteItem : public QFrame
         NoteItem(QWidget *parent = 0, int row = 0, bool readOnly = true, bool rich = true);
         int getNoteId() const;
         int getGID() const;
+        void setStatus(int status);
         int getStatus() const;
         QString getTitle();
         QString getContent();

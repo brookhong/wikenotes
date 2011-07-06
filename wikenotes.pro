@@ -53,6 +53,7 @@ win32 {
     LIBS += D:/works/openssl-0.9.8k_WIN32/lib/libeay32.lib -luser32
 }
 CONFIG(debug, debug|release) {
+    DEFINES += _DEBUG
     QMAKE_CXXFLAGS += -fprofile-arcs -ftest-coverage
     QMAKE_LDFLAGS += -fprofile-arcs -ftest-coverage
     LIBS += -lgcov

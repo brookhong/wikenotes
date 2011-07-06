@@ -238,6 +238,10 @@ int NoteItem::getGID() const
 {
     return m_gid;
 }
+void NoteItem::setStatus(int status)
+{
+    m_status = status;
+}
 int NoteItem::getStatus() const
 {
     return m_status;
@@ -453,7 +457,7 @@ void NoteItem::setActiveItem(NoteItem* item)
     if(s_activeNote && s_activeNote->m_readOnly) {
         s_activeNote->active();
     }
-    g_mainWindow->noteSelected(s_activeNote!=0, s_activeNote && s_activeNote->m_rich);
+    g_mainWindow->noteSelected(s_activeNote!=0, s_activeNote && s_activeNote->m_rich, s_activeNote && s_activeNote->m_status == 2);
 }
 NoteItem* NoteItem::getActiveItem()
 {

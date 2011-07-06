@@ -79,7 +79,7 @@ class MainWindow : public QMainWindow
         void loadImageFromDB(const QString& fileName, QByteArray& imgData);
         SQLiteStatement* getSqlQuery();
         void cancelEdit();
-        void noteSelected(bool has, bool htmlView);
+        void noteSelected(bool has, bool htmlView, bool publicNote);
         void ensureVisible(NoteItem* item);
         static QString s_query;
         static QFont s_font;
@@ -109,6 +109,7 @@ class MainWindow : public QMainWindow
         void newNote(bool rich);
         void saveNote();
         void delActiveNote();
+        void lockUnlockNote();
         void importNotes();
         void exportNotes();
         void syncNotes();
@@ -199,12 +200,16 @@ class MainWindow : public QMainWindow
         int m_uid;
         QString m_user;
         QString m_pass;
+        int m_nSyncing;
+        QLabel* m_lblSyncing;
+        inline void showSyncProgress();
         int m_syncMode;
         int m_syncTimer;
         QFile m_syncLog;
         void requestLogin();
         void requestDeleteNote(int gid);
         void delNoteByGid(int gid);
+        void deleteNote(int row, int gid);
         void pullNote(int gid);
         void pushNote(int rowid);
         void _syncNotes(QMap<int,int>& notesData);

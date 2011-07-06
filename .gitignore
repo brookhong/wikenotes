@@ -8,4 +8,4 @@ ui_*.h
 *.7z
 *.pro.user
 wikenotes/
-blog/
+server/
